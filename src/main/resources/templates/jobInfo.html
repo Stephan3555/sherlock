@@ -70,14 +70,28 @@
                                 </div>
                             </div>
 
+                            <label class="control-label">Owner's Slack Channel (for anomaly alerts):</label>
                             <div class="form-group">
-                                <label class="control-label" for="emailOnNoData">Get email if new datapoint is not available:</label>
-                                <div id="emailOnNoData">
-                                    <input type="radio" id="emailOnNoDataYes" name="emailOnNoData" value="true"/>
-                                    <label class="control-label" for="emailOnNoDataYes">YES</label>
+                                <label class="control-label" for="slackId">Slack:</label>
+                                <p id="defaultslackIdMsg" class="bg-info">Select a Slack ID:</p>
+                                <select id="slackId" class="form-control" name="slackId"
+                                        th:field="${slackId}" th:required="true">
+                                    <option th:each="slackChannel : ${slackChannels}"
+                                            th:value="${slackChannel.getSlackId()}"
+                                            th:selected="false"
+                                            th:attr="webhook-url=${slackChannel.getSlackWebhookUrl()}"
+                                            th:text="${slackChannel.getSlackId()}"></option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="control-label" for="notificationOnNoData">Get Notification if new datapoint is not available:</label>
+                                <div id="notificationOnNoData">
+                                    <input type="radio" id="notificationOnNoDataYes" name="notificationOnNoData" value="true"/>
+                                    <label class="control-label" for="notificationOnNoDataYes">YES</label>
                                     <span>&nbsp;&nbsp;&nbsp;</span>
-                                    <input type="radio" id="emailOnNoDataNo" name="emailOnNoData" value="false"/>
-                                    <label class="control-label" for="emailOnNoDataNo">NO</label>
+                                    <input type="radio" id="notificationOnNoDataNo" name="notificationOnNoData" value="false"/>
+                                    <label class="control-label" for="notificationOnNoDataNo">NO</label>
                                 </div>
                             </div>
 
@@ -356,343 +370,349 @@
 <!-- #wrapper -->
 
 <script language="javascript" type="text/javascript" th:inline="javascript">
-/*<![CDATA[*/
+    /*<![CDATA[*/
 
-        $("#popoverInfo").load('/content/kSigmaTable.html #sensitivityTable');
+    $("#popoverInfo").load('/content/kSigmaTable.html #sensitivityTable');
 
-        var queryText = CodeMirror.fromTextArea($('#queryText')[0], {
-                            matchBrackets: true,
-                            mode: "application/ld+json",
-                            lineWrapping: true,
-                            lineNumbers: true,
-                            scrollbarStyle: "simple",
-                            highlightSelectionMatches: {showToken: /\w/, annotateScrollbar: true},
-                            readOnly: ([[${deletedJobsView} != null]] ? true : false)
-                        });
+    var queryText = CodeMirror.fromTextArea($('#queryText')[0], {
+        matchBrackets: true,
+        mode: "application/ld+json",
+        lineWrapping: true,
+        lineNumbers: true,
+        scrollbarStyle: "simple",
+        highlightSelectionMatches: {showToken: /\w/, annotateScrollbar: true},
+        readOnly: ([[${deletedJobsView} != null]] ? true : false)
+    });
 
-        cmResize(queryText);
-        selectMax();
+    cmResize(queryText);
+    selectMax();
 
-        $("#sdSlider").slider({
-            value: [[${job.getSigmaThreshold()}]]
+    $("#sdSlider").slider({
+        value: [[${job.getSigmaThreshold()}]]
+    });
+
+    $(document).ready(function(){
+        $('[data-toggle="popover"]').popover({
+            html: true,
+            title: function () {
+                return "Expected fraction of population inside range on bell curve. Outside population is considered as anomaly in data";
+            },
+            content: function () {
+                return $("#popoverInfo").html();
+            }
         });
-
-        $(document).ready(function(){
-            $('[data-toggle="popover"]').popover({
-                    html: true,
-                    title: function () {
-                        return "Expected fraction of population inside range on bell curve. Outside population is considered as anomaly in data";
-                    },
-                    content: function () {
-                        return $("#popoverInfo").html();
-                    }
-            });
-            if ([[${job.getEmailOnNoData()}]] === true) {
-		        $('input[id=emailOnNoDataYes]', '#jobInfoForm').attr('checked', true);
-		    } else {
-		        $('input[id=emailOnNoDataNo]', '#jobInfoForm').attr('checked', true);
-		    }
-        });
-
-        if([[${deletedJobsView} != null]]) {
-            $('#testName').attr("disabled", true);
-            $('#testDescription').attr("disabled", true);
-            $('#ownerName').attr("disabled", true);
-            $('#ownerEmail').attr("disabled", true);
-            $('#queryUrl').attr("disabled", true);
-            $('#granularityRange').attr("disabled", true);
-            $('#timeseriesRange').attr("disabled", true);
-            $('#granularity').attr("disabled", true);
-            $('#frequency').attr("disabled", true);
-            $("#sdSlider").slider("disable");
-            $('#tsModels').attr("disabled", true);
-            $('#adModels').attr("disabled", true);
+        if ([[${job.getNotificationOnNoData()}]] === true) {
+            $('input[id=notificationOnNoDataYes]', '#jobInfoForm').attr('checked', true);
+        } else {
+            $('input[id=notificationOnNoDataNo]', '#jobInfoForm').attr('checked', true);
         }
+    });
 
-        $("#sdSlider").on("slideStop", function(slideEvent) {
+    if([[${deletedJobsView} != null]]) {
+        $('#testName').attr("disabled", true);
+        $('#testDescription').attr("disabled", true);
+        $('#ownerName').attr("disabled", true);
+        $('#ownerEmail').attr("disabled", true);
+        $('#slackId').attr("disabled", true);
+        $('#queryUrl').attr("disabled", true);
+        $('#granularityRange').attr("disabled", true);
+        $('#timeseriesRange').attr("disabled", true);
+        $('#granularity').attr("disabled", true);
+        $('#frequency').attr("disabled", true);
+        $("#sdSlider").slider("disable");
+        $('#tsModels').attr("disabled", true);
+        $('#adModels').attr("disabled", true);
+    }
+
+    $("#sdSlider").on("slideStop", function(slideEvent) {
+        updateMode();
+        $("#sdSliderVal").text(slideEvent.value);
+    });
+
+    $('#testName').on('input', function() {
+        updateMode();
+    });
+
+    $('#testDescription').on('input', function() {
+        updateMode();
+    });
+
+    $('#ownerName').on('input', function() {
+        updateMode();
+    });
+
+    $('#queryUrl').on('input', function() {
+        updateMode();
+    });
+
+    $('#granularity').change(function() {
+        updateMode();
+        updateTimeseriesRange();
+    });
+
+    $('#slackId').change(function() {
+        updateMode();
+    });
+
+    $('#timeseriesRange').on('input', function() {
+        updateMode();
+    });
+
+    $('#granularityRange').on('input', function() {
+        updateMode();
+    });
+
+    $('#frequency').change(function() {
+        updateMode();
+    });
+
+    $('#tsModels').change(function() {
+        updateMode();
+    });
+
+    $('#adModels').change(function() {
+        updateMode();
+    });
+
+    $('input[type=radio][name=notificationOnNoData]').change(function() {
+        updateMode();
+    });
+
+    function updateMode() {
+        /*[+
+        // Ignore for delete mode.
+        // Show update button for other modes.
+        if ([[${deletedJobsView == null}]]) {
+            $('#updateTitle').attr("hidden", false);
+            $('#title').attr("hidden", true);
+            $('#jobActions').attr("hidden", true);
+            $('#updateActions').attr("hidden", false);
+        }
+        +]*/
+    }
+
+    queryText.on('change', function(cm) {
+        if (queryText.getValue() == '') {
+            showWarningMessage("Query cannot be empty");
+        }
+        updateMode();
+    });
+
+    $("#deleteConfirmModalYes").click(function() {
+        $.ajax({
+            type: 'POST',
+            url: '/DeletedJobs/' + $('#jobId').val(),
+            dataType: 'text',
+            success: function (response) {
+                if (response === 'success') {
+                    showInfoMessage("Job Deleted successfully.");
+                    setTimeout(function() {
+                        window.location.href = '/DeletedJobs';
+                    }, 1500);
+                } else {
+                    showErrorMessage("Something went wrong in deleting the job! Try again.");
+                }
+            },
+            error : ajaxMessage
+        });
+        return;
+    });
+
+    $("#cloneConfirmModalYes").click(function() {
+        $.ajax({
+            type: 'POST',
+            url: '/CloneJob/' + $('#jobId').val(),
+            dataType: 'text',
+            success: function (response, status, jQxhr) {
+                if (status === 'success') {
+                    showInfoMessage("Job Cloned successfully.");
+                    setTimeout(function() {
+                        window.location.href = '/Jobs/' + response;
+                    }, 1500);
+                } else {
+                    showErrorMessage("Something went wrong in cloning the job! Try again.");
+                }
+            },
+            error : ajaxMessage
+        });
+        return;
+    });
+
+    $(document).ready(function() {
+        $("#jobInfoForm").submit(function(e) {
+            e.preventDefault();
+            if($('#granularity').prop('selectedIndex') > $('#frequency').prop('selectedIndex')) {
+                showWarningMessage("The granularity must be less than or equal to the frequency!");
+                return;
+            }
+            if(parseInt($('#timeseriesRange').val()) < parseInt($('#granularityRange').val())) {
+                showWarningMessage("The granularity range must be less than or equal to the timeseries range!");
+                return;
+            }
+            var data = {};
+            data.queryUrl = $('#queryUrl').val();
+            data.query = queryText.getValue();
+            data.testName = $('#testName').val();
+            data.owner = $('#ownerName').val();
+            data.ownerEmail = $('#ownerEmail').tokenfield('getTokensList', ',');
+            data.ownerSlackId = $('#slackId').val();
+            data.notificationOnNoData = $('input[name=notificationOnNoData]:checked', '#jobInfoForm').val();
+            data.testDescription = $('#testDescription').val();
+            data.granularity = $('#granularity').val();
+            data.timeseriesRange = $('#timeseriesRange').val();
+            data.granularityRange = $('#granularityRange').val();
+            data.frequency = $('#frequency').val();
+            data.sigmaThreshold = $('#sdSliderVal').text();
+            data.clusterId = $('#clusterId').val();
+            data.tsModels = $('#tsModels').val();
+            data.adModels = $('#adModels').val();
+            $.ajax({
+                type: 'POST',
+                url: '/UpdateJobInfo/' + $('#jobId').val(),
+                data: JSON.stringify(data),
+                contentType: "application/json",
+                dataType: 'text',
+                success: function (response) {
+                    if (response === 'success') {
+                        showInfoMessage("Job updated successfully.");
+                        setTimeout(function() {
+                            window.location.href = '/Jobs/' + $('#jobId').val();
+                        }, 1500);
+                    } else {
+                        // Else there was a warning, but not a failure
+                        showWarningMessage("Something went wrong in saving/updating the job! Try again.");
+                    }
+                },
+                error : ajaxMessage
+            });
+        });
+        return;
+    });
+
+    var emailTokens = $('#ownerEmail').tokenfield();
+
+    emailTokens.on('tokenfield:createdtoken', function (e) {
+        var re = /\S+@\S+\.\S+/
+        var valid = re.test(e.attrs.value)
+        if (!valid) {
+            $(e.relatedTarget).addClass('invalid')
+        }
+        updateMode();
+    })
+        .on('tokenfield:editedtoken', function (e) {
             updateMode();
-            $("#sdSliderVal").text(slideEvent.value);
+        })
+        .on('tokenfield:removedtoken', function (e) {
+            updateMode();
         });
 
-        $('#testName').on('input', function() {
-            updateMode();
-        });
 
-        $('#testDescription').on('input', function() {
-            updateMode();
+    $("#launchConfirmModalYes").click(function() {
+        $.ajax({
+            type: 'POST',
+            url: '/LaunchJob/' + $('#jobId').val(),
+            dataType: 'text',
+            success: function (response) {
+                if (response === 'success') {
+                    showInfoMessage("Job launched successfully.");
+                    setTimeout(function() {
+                        window.location.href =  '/Jobs/' + $('#jobId').val();
+                    }, 1000);
+                } else {
+                    // Else there was a warning, but not a failure
+                    showWarningMessage("Something went wrong in launching the job! Try again.");
+                }
+            },
+            error : ajaxMessage
         });
+        return;
+    });
 
-        $('#ownerName').on('input', function() {
-            updateMode();
+    function backToJobInfo() {
+        window.location.href = '/Jobs/' + $('#jobId').val();
+    }
+
+    function continueLaunching() {
+        $('#launchConfirmModalCode').html("Do you really want to LAUNCH the job with <b>granularity</b> <code>'" + $('#granularityRange').val() + " " + $('#granularity').val() + "'</code> and <b>frequency</b> <code>'" + $('#frequency').val() + "'</code>?");
+        $('#launchConfirmModal').modal('show');
+    }
+
+    $("#stopConfirmModalYes").click(function() {
+        $.ajax({
+            type: 'POST',
+            url: '/StopJob/' + $('#jobId').val(),
+            dataType: 'text',
+            success: function (response) {
+                if (response === 'success') {
+                    showInfoMessage("Job stopped successfully.");
+                    setTimeout(function() {
+                        window.location.href =  '/Jobs/' + $('#jobId').val();
+                    }, 1000);
+                } else {
+                    // Else there was a warning, but not a failure
+                    showWarningMessage("Something went wrong in stopping the job! Try again.");
+                }
+            },
+            error : ajaxMessage
         });
+        return;
+    });
 
-        $('#queryUrl').on('input', function() {
-            updateMode();
-        });
+    function viewReports() {
+        window.location.href = '/Reports/' + $('#jobId').val() + '/' + $('#frequency').val();
+    }
 
-        $('#granularity').change(function() {
-            updateMode();
+    $('#removeGlyphicon').click(function() {
+        queryText.setValue("");
+        queryText.clearHistory();
+    });
+
+    $('#copyGlyphicon').click(function() {
+        var $temp = $("<textarea></textarea>");
+        $("body").append($temp);
+        $temp.val(queryText.getValue()).select();
+        document.execCommand("copy");
+        $temp.remove();
+    });
+
+    function selectMax() {
+        if($('#granularity').val() === "minute") {
+            $('#granularityRange').attr("max", [[${MINUTE}]]);
+        } else if($('#granularity').val() === "hour") {
+            $('#granularityRange').attr("max", [[${HOUR}]]);
+        } else if($('#granularity').val() === "day") {
+            $('#granularityRange').attr("max", [[${DAY}]]);
+        } else if($('#granularity').val() === "week") {
+            $('#granularityRange').attr("max", [[${WEEK}]]);
+        } else if($('#granularity').val() === "month") {
+            $('#granularityRange').attr("max", [[${MONTH}]]);
+        }
+    }
+
+    function updateTimeseriesRange() {
+        if($('#granularity').val() === "minute") {
+            $('#timeseriesRange').val([[${minute}]]);
+        } else if($('#granularity').val() === "hour") {
+            $('#timeseriesRange').val([[${hour}]]);
+        } else if($('#granularity').val() === "day") {
+            $('#timeseriesRange').val([[${day}]]);
+        } else if($('#granularity').val() === "week") {
+            $('#timeseriesRange').val([[${week}]]);
+        } else if($('#granularity').val() === "month") {
+            $('#timeseriesRange').val([[${month}]]);
+        }
+    }
+
+    setTimeseriesRange();
+
+    function setTimeseriesRange() {
+        if([[${job.getTimeseriesRange() == null}]]) {
             updateTimeseriesRange();
-        });
-
-        $('#timeseriesRange').on('input', function() {
-            updateMode();
-        });
-
-        $('#granularityRange').on('input', function() {
-            updateMode();
-        });
-
-        $('#frequency').change(function() {
-            updateMode();
-        });
-
-        $('#tsModels').change(function() {
-            updateMode();
-        });
-
-        $('#adModels').change(function() {
-            updateMode();
-        });
-
-        $('input[type=radio][name=emailOnNoData]').change(function() {
-            updateMode();
-        });
-
-        function updateMode() {
-            /*[+
-            // Ignore for delete mode.
-            // Show update button for other modes.
-            if ([[${deletedJobsView == null}]]) {
-                $('#updateTitle').attr("hidden", false);
-                $('#title').attr("hidden", true);
-                $('#jobActions').attr("hidden", true);
-                $('#updateActions').attr("hidden", false);
-            }
-            +]*/
+        } else {
+            $('#timeseriesRange').val([[${job.getTimeseriesRange()}]]);
         }
-
-        queryText.on('change', function(cm) {
-            if (queryText.getValue() == '') {
-                showWarningMessage("Query cannot be empty");
-            }
-            updateMode();
-        });
-
-        $("#deleteConfirmModalYes").click(function() {
-            $.ajax({
-                type: 'POST',
-                url: '/DeletedJobs/' + $('#jobId').val(),
-                dataType: 'text',
-                success: function (response) {
-                    if (response === 'success') {
-                        showInfoMessage("Job Deleted successfully.");
-                        setTimeout(function() {
-                            window.location.href = '/DeletedJobs';
-                        }, 1500);
-                    } else {
-                        showErrorMessage("Something went wrong in deleting the job! Try again.");
-                    }
-                },
-                error : ajaxMessage
-            });
-            return;
-        });
-
-        $("#cloneConfirmModalYes").click(function() {
-            $.ajax({
-                type: 'POST',
-                url: '/CloneJob/' + $('#jobId').val(),
-                dataType: 'text',
-                success: function (response, status, jQxhr) {
-                    if (status === 'success') {
-                        showInfoMessage("Job Cloned successfully.");
-                        setTimeout(function() {
-                            window.location.href = '/Jobs/' + response;
-                        }, 1500);
-                    } else {
-                        showErrorMessage("Something went wrong in cloning the job! Try again.");
-                    }
-                },
-                error : ajaxMessage
-            });
-            return;
-        });
-
-        $(document).ready(function() {
-            $("#jobInfoForm").submit(function(e) {
-                e.preventDefault();
-                if($('#granularity').prop('selectedIndex') > $('#frequency').prop('selectedIndex')) {
-                    showWarningMessage("The granularity must be less than or equal to the frequency!");
-                    return;
-                }
-                if(parseInt($('#timeseriesRange').val()) < parseInt($('#granularityRange').val())) {
-                    showWarningMessage("The granularity range must be less than or equal to the timeseries range!");
-                    return;
-                }
-                var data = {};
-                data.queryUrl = $('#queryUrl').val();
-                data.query = queryText.getValue();
-                data.testName = $('#testName').val();
-                data.owner = $('#ownerName').val();
-                data.ownerEmail = $('#ownerEmail').tokenfield('getTokensList', ',');
-                data.emailOnNoData = $('input[name=emailOnNoData]:checked', '#jobInfoForm').val();
-                data.testDescription = $('#testDescription').val();
-                data.granularity = $('#granularity').val();
-                data.timeseriesRange = $('#timeseriesRange').val();
-                data.granularityRange = $('#granularityRange').val();
-                data.frequency = $('#frequency').val();
-                data.sigmaThreshold = $('#sdSliderVal').text();
-                data.clusterId = $('#clusterId').val();
-                data.tsModels = $('#tsModels').val();
-                data.adModels = $('#adModels').val();
-                $.ajax({
-                    type: 'POST',
-                    url: '/UpdateJobInfo/' + $('#jobId').val(),
-                    data: JSON.stringify(data),
-                    contentType: "application/json",
-                    dataType: 'text',
-                    success: function (response) {
-                        if (response === 'success') {
-                            showInfoMessage("Job updated successfully.");
-                            setTimeout(function() {
-                                window.location.href = '/Jobs/' + $('#jobId').val();
-                            }, 1500);
-                        } else {
-                            // Else there was a warning, but not a failure
-                            showWarningMessage("Something went wrong in saving/updating the job! Try again.");
-                        }
-                    },
-                    error : ajaxMessage
-                });
-            });
-            return;
-        });
-
-        var emailTokens = $('#ownerEmail').tokenfield();
-
-        emailTokens.on('tokenfield:createdtoken', function (e) {
-                        var re = /\S+@\S+\.\S+/
-                        var valid = re.test(e.attrs.value)
-                        if (!valid) {
-                            $(e.relatedTarget).addClass('invalid')
-                        }
-                        updateMode();
-                   })
-                   .on('tokenfield:editedtoken', function (e) {
-                        updateMode();
-                   })
-                   .on('tokenfield:removedtoken', function (e) {
-                        updateMode();
-                   });
-
-
-        $("#launchConfirmModalYes").click(function() {
-            $.ajax({
-                type: 'POST',
-                url: '/LaunchJob/' + $('#jobId').val(),
-                dataType: 'text',
-                success: function (response) {
-                    if (response === 'success') {
-                        showInfoMessage("Job launched successfully.");
-                        setTimeout(function() {
-                            window.location.href =  '/Jobs/' + $('#jobId').val();
-                        }, 1000);
-                    } else {
-                        // Else there was a warning, but not a failure
-                        showWarningMessage("Something went wrong in launching the job! Try again.");
-                    }
-                },
-                error : ajaxMessage
-            });
-        return;
-        });
-
-        function backToJobInfo() {
-            window.location.href = '/Jobs/' + $('#jobId').val();
-        }
-
-        function continueLaunching() {
-            $('#launchConfirmModalCode').html("Do you really want to LAUNCH the job with <b>granularity</b> <code>'" + $('#granularityRange').val() + " " + $('#granularity').val() + "'</code> and <b>frequency</b> <code>'" + $('#frequency').val() + "'</code>?");
-            $('#launchConfirmModal').modal('show');
-        }
-
-        $("#stopConfirmModalYes").click(function() {
-            $.ajax({
-                type: 'POST',
-                url: '/StopJob/' + $('#jobId').val(),
-                dataType: 'text',
-                success: function (response) {
-                    if (response === 'success') {
-                        showInfoMessage("Job stopped successfully.");
-                        setTimeout(function() {
-                            window.location.href =  '/Jobs/' + $('#jobId').val();
-                        }, 1000);
-                    } else {
-                        // Else there was a warning, but not a failure
-                        showWarningMessage("Something went wrong in stopping the job! Try again.");
-                    }
-                },
-                error : ajaxMessage
-            });
-        return;
-        });
-
-        function viewReports() {
-            window.location.href = '/Reports/' + $('#jobId').val() + '/' + $('#frequency').val();
-        }
-
-        $('#removeGlyphicon').click(function() {
-            queryText.setValue("");
-            queryText.clearHistory();
-        });
-
-        $('#copyGlyphicon').click(function() {
-            var $temp = $("<textarea></textarea>");
-            $("body").append($temp);
-            $temp.val(queryText.getValue()).select();
-            document.execCommand("copy");
-            $temp.remove();
-        });
-
-        function selectMax() {
-            if($('#granularity').val() === "minute") {
-                $('#granularityRange').attr("max", [[${MINUTE}]]);
-            } else if($('#granularity').val() === "hour") {
-                $('#granularityRange').attr("max", [[${HOUR}]]);
-            } else if($('#granularity').val() === "day") {
-                $('#granularityRange').attr("max", [[${DAY}]]);
-            } else if($('#granularity').val() === "week") {
-                $('#granularityRange').attr("max", [[${WEEK}]]);
-            } else if($('#granularity').val() === "month") {
-                $('#granularityRange').attr("max", [[${MONTH}]]);
-            }
-        }
-
-        function updateTimeseriesRange() {
-            if($('#granularity').val() === "minute") {
-                $('#timeseriesRange').val([[${minute}]]);
-            } else if($('#granularity').val() === "hour") {
-                $('#timeseriesRange').val([[${hour}]]);
-            } else if($('#granularity').val() === "day") {
-                $('#timeseriesRange').val([[${day}]]);
-            } else if($('#granularity').val() === "week") {
-                $('#timeseriesRange').val([[${week}]]);
-            } else if($('#granularity').val() === "month") {
-                $('#timeseriesRange').val([[${month}]]);
-            }
-        }
-
-        setTimeseriesRange();
-
-        function setTimeseriesRange() {
-            if([[${job.getTimeseriesRange() == null}]]) {
-                updateTimeseriesRange();
-            } else {
-                $('#timeseriesRange').val([[${job.getTimeseriesRange()}]]);
-            }
-        }
-/*]]>*/
+    }
+    /*]]>*/
 </script>
 
 </body>

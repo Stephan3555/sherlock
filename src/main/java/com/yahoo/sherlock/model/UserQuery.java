@@ -51,8 +51,11 @@ public class UserQuery {
     /** Email id of the owner. */
     private String ownerEmail;
 
-    /** Email on no data case. */
-    private Boolean emailOnNoData;
+    /** Slack Id of the owner. */
+    private String ownerSlackId;
+
+    /** Notification on no data case. */
+    private Boolean notificationOnNoData;
 
     /** Query end time for custom time-range. */
     private String queryEndTimeText;

@@ -53,10 +53,16 @@ public class JobMetadata implements Serializable, Cloneable {
     private String ownerEmail;
 
     /**
-     * Option to have email on no-data cases.
+     * Slack ID of the owner.
      */
     @Attribute
-    private Boolean emailOnNoData = false;
+    private String ownerSlackId;
+
+    /**
+     * Option to have Notification on no-data cases.
+     */
+    @Attribute
+    private Boolean notificationOnNoData = false;
 
     /**
      * User query to be stored.
@@ -182,7 +188,8 @@ public class JobMetadata implements Serializable, Cloneable {
         this.jobId = jobMetadata.getJobId();
         this.owner = jobMetadata.getOwner();
         this.ownerEmail = jobMetadata.getOwnerEmail();
-        this.emailOnNoData = jobMetadata.getEmailOnNoData();
+        this.ownerSlackId = jobMetadata.getOwnerSlackId();
+        this.notificationOnNoData = jobMetadata.getNotificationOnNoData();
         this.userQuery = jobMetadata.getUserQuery();
         this.query = jobMetadata.getQuery();
         this.testName = jobMetadata.getTestName();
@@ -213,7 +220,8 @@ public class JobMetadata implements Serializable, Cloneable {
     public JobMetadata(UserQuery userQuery, @Nullable Query query) {
         setOwner(userQuery.getOwner());
         setOwnerEmail(userQuery.getOwnerEmail());
-        setEmailOnNoData(userQuery.getEmailOnNoData());
+        setOwnerSlackId(userQuery.getOwnerSlackId());
+        setNotificationOnNoData(userQuery.getNotificationOnNoData());
         setUserQuery(userQuery.getQuery());
         setQuery(query == null ? null : query.getQueryJsonObject().toString());
         setTestName(userQuery.getTestName());
@@ -278,7 +286,8 @@ public class JobMetadata implements Serializable, Cloneable {
         }
         setOwner(newJob.getOwner());
         setOwnerEmail(newJob.getOwnerEmail());
-        setEmailOnNoData(newJob.getEmailOnNoData());
+        setOwnerSlackId(newJob.getOwnerSlackId());
+        setNotificationOnNoData(newJob.getNotificationOnNoData());
         setUserQuery(newJob.getUserQuery());
         setTestName(newJob.getTestName());
         setTestDescription(newJob.getTestDescription());

@@ -34,6 +34,7 @@ public class LettuceAnomalyReportAccessor
     private final String timeName;
     private final String frequencyName;
     private final String emailIdReportName;
+    private final String slackIdReportName;
 
     /**
      * @param params store params
@@ -44,6 +45,7 @@ public class LettuceAnomalyReportAccessor
         this.timeName = params.get(DatabaseConstants.INDEX_TIMESTAMP);
         this.frequencyName = params.get(DatabaseConstants.INDEX_FREQUENCY);
         this.emailIdReportName = params.get(DatabaseConstants.INDEX_EMAILID_REPORT);
+        this.slackIdReportName = params.get(DatabaseConstants.INDEX_SLACKID_REPORT);
     }
 
     /**
@@ -55,7 +57,7 @@ public class LettuceAnomalyReportAccessor
     }
 
     @Override
-    public void putAnomalyReports(List<AnomalyReport> reports, List<String> emailIds) throws IOException {
+    public void putAnomalyReportsForEmails(List<AnomalyReport> reports, List<String> emailIds) throws IOException {
         log.info("Putting [{}] anomaly reports", reports.size());
         try (
                 RedisConnection<String> conn = connect();
@@ -111,6 +113,62 @@ public class LettuceAnomalyReportAccessor
     }
 
     @Override
+    public void putAnomalyReportsForSlacks(List<AnomalyReport> reports, List<String> slackIds) throws IOException {
+        log.info("Putting [{}] anomaly reports", reports.size());
+        try (
+                RedisConnection<String> conn = connect();
+                RedisConnection<byte[]> binary = binary()
+        ) {
+            List<AnomalyReport> requireId = new ArrayList<>(reports.size());
+            List<AnomalyReport> ready = new ArrayList<>(reports.size());
+            AsyncCommands<String> cmd = conn.async();
+            AsyncCommands<byte[]> bin = binary.async();
+            cmd.setAutoFlushCommands(false);
+            bin.setAutoFlushCommands(false);
+            for (AnomalyReport report : reports) {
+                if (isMissingId(report)) {
+                    requireId.add(report);
+                } else {
+                    ready.add(report);
+                }
+            }
+            if (!requireId.isEmpty()) {
+                log.info("Generating new IDs for [{}] reports", requireId.size());
+                Integer[] newIds = newIds(requireId.size());
+                for (int i = 0; i < newIds.length; i++) {
+                    requireId.get(i).setUniqueId(newIds[i].toString());
+                }
+                ready.addAll(requireId);
+                requireId.clear();
+            }
+            List<RedisFuture> arrFutures = new ArrayList<>(ready.size() + 1);
+            RedisFuture[] saddFutures = new RedisFuture[ready.size() * (6 + 2 * slackIds.size())];
+            int i = 0;
+            long expirationTime = Constants.SECONDS_IN_DAY * (ready.get(0).getJobFrequency().equalsIgnoreCase(Constants.HOUR) ?
+                    Constants.REDIS_RETENTION_WEEKS_IN_DAYS : (ready.get(0).getJobFrequency().equalsIgnoreCase(Constants.MINUTE) ?
+                    Constants.REDIS_RETENTION_ONE_DAY : Constants.REDIS_RETENTION_YEARS_IN_DAYS));
+            for (AnomalyReport report : ready) {
+                arrFutures.addAll(writeReport(bin, cmd, report, expirationTime, this));
+                saddFutures[i++] = cmd.sadd(index(jobIdName, report.getJobId()), report.getUniqueId());
+                saddFutures[i++] = cmd.expire(index(jobIdName, report.getJobId()), expirationTime);
+                saddFutures[i++] = cmd.sadd(index(frequencyName, report.getJobFrequency()), report.getUniqueId());
+                saddFutures[i++] = cmd.expire(index(frequencyName, report.getJobFrequency()), expirationTime);
+                saddFutures[i++] = cmd.sadd(index(timeName, report.getReportQueryEndTime()), report.getUniqueId());
+                saddFutures[i++] = cmd.expire(index(timeName, report.getReportQueryEndTime()), expirationTime);
+                for (String slackId : slackIds) {
+                    saddFutures[i++] = cmd.sadd(index(slackIdReportName, slackId), report.getUniqueId());
+                    saddFutures[i++] = cmd.expire(index(slackIdReportName, slackId), expirationTime);
+                }
+            }
+            arrFutures.addAll(Lists.newArrayList(saddFutures));
+            cmd.flushCommands();
+            bin.flushCommands();
+            awaitRaw(arrFutures);
+            log.info("Successfully inserted reports");
+        }
+    }
+
+    @Override
     public List<AnomalyReport> getAnomalyReportsForJob(String jobId, String frequency) throws IOException {
         log.info("Getting anomaly reports for job [{}] with frequency [{}]", jobId, frequency);
         try (RedisConnection<String> conn = connect()) {
@@ -150,6 +208,34 @@ public class LettuceAnomalyReportAccessor
                 await(removedReports);
             }
             log.info("Removed {} anomaly reports to send it to {}", rarr.length, emailId);
+            return getAnomalyReports(reportIds, this);
+        } catch (Exception e) {
+            log.error("Error occurred while getting anomaly reports!", e);
+            throw new IOException(e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public List<AnomalyReport> getAnomalyReportsForSlackId(String slackId) throws IOException {
+        log.info("Getting anomaly reports for Slack Channel [{}]", slackId);
+        try (RedisConnection<String> conn = connect()) {
+            AsyncCommands<String> cmd = conn.async();
+            cmd.setAutoFlushCommands(false);
+            RedisFuture<Set<String>> slackReportChannels = cmd.smembers(index(slackIdReportName, slackId));
+            cmd.flushCommands();
+            await(slackReportChannels);
+            Set<String> reportIds = slackReportChannels.get();
+            String[] rarr = new String[reportIds.size()];
+            int i = 0;
+            for (String s : reportIds) {
+                rarr[i] = s; i++;
+            }
+            if (i > 0) {
+                RedisFuture<Long> removedReports = cmd.srem(index(slackIdReportName, slackId), rarr);
+                cmd.flushCommands();
+                await(removedReports);
+            }
+            log.info("Removed {} anomaly reports to send it to {}", rarr.length, slackId);
             return getAnomalyReports(reportIds, this);
         } catch (Exception e) {
             log.error("Error occurred while getting anomaly reports!", e);

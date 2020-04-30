@@ -96,6 +96,41 @@
                                     </div>
                                 </div>
                             </div>
+                            <div class="form-group">
+                                <div class="panel panel-default">
+                                    <div class="panel-heading">
+                                        <h3 class="panel-title">Slack Channels</h3>
+                                    </div>
+                                    <div class="panel-body">
+                                        <table id="slackTable" class="table table-striped table-hover table-bordered">
+                                            <thead>
+                                            <tr>
+                                                <th>Slack Channel</th>
+                                                <th>Webhook URL</th>
+                                                <th>Username</th>
+                                                <th>Icon Emoji</th>
+                                                <th>Mention</th>
+                                                <th>Send out Hour</th>
+                                                <th>Send out Minute</th>
+                                                <th>Interval</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            <tr th:each="slack: ${slacks}" class='clickable-row' th:attr="data-href=${'/Slacks/' + slack.getSlackId()}">
+                                                <td th:text="${slack.getSlackId()}">slackId</td>
+                                                <td th:text="${slack.getSlackWebhookUrl()}">slackWebhookUrl</td>
+                                                <td th:text="${slack.getSlackUsername()}">slackUsername</td>
+                                                <td th:text="${slack.getSlackIconEmoji()}">slackIconEmoji</td>
+                                                <td th:text="${slack.getSlackMention()}">SlackWebhookUrl</td>
+                                                <td th:text="${slack.getRepeatInterval().equals('instant') || slack.getRepeatInterval().equals('hour') ? 'N/A' : slack.getSendOutHour()}">hour</td>
+                                                <td th:text="${slack.getRepeatInterval().equals('instant') ? 'N/A' :slack.getSendOutMinute()}">minute</td>
+                                                <td th:text="${slack.getRepeatInterval()}">interval</td>
+                                            </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
                         </fieldset>
                     </form>
                 </div>

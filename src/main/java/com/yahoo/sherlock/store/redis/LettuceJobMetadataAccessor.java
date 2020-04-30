@@ -1,21 +1,23 @@
 package com.yahoo.sherlock.store.redis;
 
 import com.google.common.collect.Lists;
-import io.lettuce.core.RedisFuture;
 import com.yahoo.sherlock.enums.JobStatus;
 import com.yahoo.sherlock.exception.JobNotFoundException;
 import com.yahoo.sherlock.model.EmailMetaData;
 import com.yahoo.sherlock.model.JobMetadata;
+import com.yahoo.sherlock.model.SlackMetaData;
 import com.yahoo.sherlock.settings.Constants;
 import com.yahoo.sherlock.settings.DatabaseConstants;
 import com.yahoo.sherlock.store.AnomalyReportAccessor;
 import com.yahoo.sherlock.store.DeletedJobMetadataAccessor;
 import com.yahoo.sherlock.store.EmailMetadataAccessor;
 import com.yahoo.sherlock.store.JobMetadataAccessor;
+import com.yahoo.sherlock.store.SlackMetadataAccessor;
 import com.yahoo.sherlock.store.Store;
 import com.yahoo.sherlock.store.StoreParams;
 import com.yahoo.sherlock.store.core.AsyncCommands;
 import com.yahoo.sherlock.store.core.RedisConnection;
+import io.lettuce.core.RedisFuture;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -39,10 +41,12 @@ public class LettuceJobMetadataAccessor
     private final String jobIdName;
     private final String jobStatusName;
     private final String clusterIdName;
+    private final String slackIdName;
 
     private final DeletedJobMetadataAccessor deletedAccessor;
     private final AnomalyReportAccessor anomalyReportAccessor;
     private final EmailMetadataAccessor emailMetadataAccessor;
+    private final SlackMetadataAccessor slackMetadataAccessor;
 
     /**
      * @param params store parameters
@@ -52,18 +56,21 @@ public class LettuceJobMetadataAccessor
         this.jobIdName = params.get(DatabaseConstants.INDEX_JOB_ID);
         this.jobStatusName = params.get(DatabaseConstants.INDEX_JOB_STATUS);
         this.clusterIdName = params.get(DatabaseConstants.INDEX_JOB_CLUSTER_ID);
+        this.slackIdName = params.get(DatabaseConstants.INDEX_SLACKID_JOBID);
         deletedAccessor = Store.getDeletedJobMetadataAccessor();
         anomalyReportAccessor = Store.getAnomalyReportAccessor();
         emailMetadataAccessor = Store.getEmailMetadataAccessor();
+        slackMetadataAccessor = Store.getSlackMetadataAccessor();
     }
 
     /**
-     * @param job job to check ID
+     * @param job job to check job ID
      * @return whether the job has an assigned ID
      */
-    protected static boolean isMissingId(JobMetadata job) {
+    protected static boolean isMissingJobId(JobMetadata job) {
         return job.getJobId() == null;
     }
+
 
     /**
      * Delete a job with the given ID.
@@ -185,7 +192,9 @@ public class LettuceJobMetadataAccessor
             await(values);
             List<JobMetadata> jobs = new ArrayList<>(values.size());
             for (RedisFuture<Map<String, String>> value : values) {
-                jobs.add(unmap(JobMetadata.class, value.get()));
+                if (value.get() != null && !value.get().isEmpty()) {
+                    jobs.add(unmap(JobMetadata.class, value.get()));
+                }
             }
             return jobs;
         } catch (InterruptedException | ExecutionException e) {
@@ -210,9 +219,9 @@ public class LettuceJobMetadataAccessor
     public String putJobMetadata(JobMetadata job) throws IOException {
         log.info("Putting job metadata with ID [{}]", job.getJobId());
         try (RedisConnection<String> conn = connect()) {
-            if (isMissingId(job)) {
-                job.setJobId(newId());
-            }
+
+            generateIdsIfNecessary(job);
+
             AsyncCommands<String> cmd = conn.async();
             cmd.setAutoFlushCommands(false);
             String jobId = job.getJobId().toString();
@@ -220,18 +229,34 @@ public class LettuceJobMetadataAccessor
                     cmd.hmset(key(job.getJobId()), map(job)),
                     cmd.sadd(index(jobIdName, "all"), jobId),
                     cmd.sadd(index(jobStatusName, job.getJobStatus()), jobId),
-                    cmd.sadd(index(clusterIdName, job.getClusterId()), jobId)
+                    cmd.sadd(index(clusterIdName, job.getClusterId()), jobId),
+                    cmd.sadd(index(slackIdName, job.getOwnerSlackId()), jobId)
             };
             cmd.flushCommands();
             await(futures);
             String[] emails = job.getOwnerEmail() == null || job.getOwnerEmail().isEmpty() ? new String[0] : job.getOwnerEmail().split(Constants.COMMA_DELIMITER);
+
             if (emails.length != 0) {
                 for (String email : emails) {
                     emailMetadataAccessor.putEmailMetadataIfNotExist(email, jobId);
                 }
             }
+
             log.info("Job metadata with ID [{}] is updated", job.getJobId());
             return String.valueOf(job.getJobId());
+        }
+    }
+
+
+    /**
+     * Checks and generates the JobID and SlackID if necessary.
+     *
+     * @param job job to test
+     * @throws IOException if there is an error with the persistence layer
+     */
+    private void generateIdsIfNecessary(JobMetadata job) throws IOException {
+        if (isMissingJobId(job)) {
+            job.setJobId(newId());
         }
     }
 
@@ -241,7 +266,7 @@ public class LettuceJobMetadataAccessor
         try (RedisConnection<String> conn = connect()) {
             List<JobMetadata> requireId = new ArrayList<>(jobs.size());
             for (JobMetadata job : jobs) {
-                if (isMissingId(job)) {
+                if (isMissingJobId(job)) {
                     requireId.add(job);
                 }
             }
@@ -252,7 +277,7 @@ public class LettuceJobMetadataAccessor
                 }
             }
             AsyncCommands<String> cmd = conn.async();
-            RedisFuture[] futures = new RedisFuture[4 * jobs.size()];
+            RedisFuture[] futures = new RedisFuture[5 * jobs.size()];
             cmd.setAutoFlushCommands(false);
             int i = 0;
             for (JobMetadata job : jobs) {
@@ -332,7 +357,7 @@ public class LettuceJobMetadataAccessor
 
     @Override
     public void deleteEmailFromJobs(EmailMetaData emailMetaData)
-        throws IOException {
+            throws IOException {
         String emailId = emailMetaData.getEmailId();
         log.info("Deleting [{}] from all related jobs", emailId);
         try (RedisConnection<String> conn = connect()) {
@@ -345,7 +370,7 @@ public class LettuceJobMetadataAccessor
             for (JobMetadata jobMetadata : jobList) {
                 if (jobMetadata.getOwnerEmail() != null && !jobMetadata.getOwnerEmail().isEmpty()) {
                     List<String> emails = Arrays.stream(jobMetadata.getOwnerEmail().split(Constants.COMMA_DELIMITER))
-                        .collect(Collectors.toList());
+                            .collect(Collectors.toList());
                     emails.remove(emailId);
                     jobMetadata.setOwnerEmail(emails.stream().collect(Collectors.joining(Constants.COMMA_DELIMITER)));
                 }
@@ -359,6 +384,34 @@ public class LettuceJobMetadataAccessor
             log.info("Successfully deleted email {} from all related jobs", emailId);
         } catch (ExecutionException | InterruptedException e) {
             log.error("Error while deleting emails for jobs!", e);
+            throw new IOException(e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void deleteSlackFromJobs(SlackMetaData slackMetaData)
+            throws IOException {
+        String slackId = slackMetaData.getSlackId();
+        log.info("Deleting [{}] from all related jobs", slackId);
+        try (RedisConnection<String> conn = connect()) {
+            AsyncCommands<String> cmd = conn.async();
+            cmd.setAutoFlushCommands(false);
+            RedisFuture<Set<String>> jobIds = cmd.smembers(index(DatabaseConstants.INDEX_SLACKID_JOBID, slackId));
+            cmd.flushCommands();
+            await(jobIds);
+            List<JobMetadata> jobList = getJobMetadata(jobIds.get());
+            for (JobMetadata jobMetadata : jobList) {
+                jobMetadata.setOwnerSlackId(null);
+            }
+            putJobMetadata(jobList);
+            cmd.setAutoFlushCommands(false);
+            RedisFuture<Long> deleteIndex = cmd.del(index(DatabaseConstants.INDEX_SLACKID_JOBID, slackId));
+            cmd.flushCommands();
+            await(deleteIndex);
+            slackMetadataAccessor.deleteSlackMetadata(slackMetaData);
+            log.info("Successfully deleted slack {} from all related jobs", slackId);
+        } catch (ExecutionException | InterruptedException e) {
+            log.error("Error while deleting slacks for jobs!", e);
             throw new IOException(e.getMessage(), e);
         }
     }

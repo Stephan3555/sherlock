@@ -10,6 +10,7 @@ import com.yahoo.sherlock.model.EmailMetaData;
 import com.yahoo.sherlock.model.JobMetadata;
 import com.yahoo.sherlock.exception.JobNotFoundException;
 
+import com.yahoo.sherlock.model.SlackMetaData;
 import lombok.NonNull;
 
 import java.io.IOException;
@@ -167,6 +168,13 @@ public interface JobMetadataAccessor {
      * @throws IOException if an error occurs
      */
     void deleteEmailFromJobs(EmailMetaData emailMetaData) throws IOException;
+
+    /**
+     * Method to delete given slack from all related jobs.
+     * @param slackMetaData slack metadata of slackId that is to be deleted
+     * @throws IOException if an error occurs
+     */
+    void deleteSlackFromJobs(SlackMetaData slackMetaData) throws IOException;
 
     /**
      * Method to save redis snapshot.

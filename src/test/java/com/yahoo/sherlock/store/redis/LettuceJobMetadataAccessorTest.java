@@ -201,14 +201,14 @@ public class LettuceJobMetadataAccessorTest {
         verify(jma).newId();
         verify(async).hmset(anyString(), anyMap());
         verify(ema, times(1)).putEmailMetadataIfNotExist(anyString(), anyString());
-        verify(async, times(3)).sadd(anyString(), anyVararg());
+        verify(async, times(4)).sadd(anyString(), anyVararg());
         // update
         job.setOwnerEmail("");
         job.setJobStatus("RUNNING");
         jma.putJobMetadata(job);
         verify(async, times(2)).hmset(anyString(), anyMap());
         verify(ema, times(1)).putEmailMetadataIfNotExist(anyString(), anyString());
-        verify(async, times(6)).sadd(anyString(), anyVararg());
+        verify(async, times(8)).sadd(anyString(), anyVararg());
         verify(jma).newId();
     }
 

@@ -166,6 +166,11 @@ public final class Constants {
     public static final String EMAIL_HTML = "emailHtml";
 
     /**
+     * Constant for 'slackText'.
+     */
+    public static final String SLACK_TEXT = "slackText";
+
+    /**
      * Constant for 'selectedDate'.
      */
     public static final String SELECTED_DATE = "selectedDate";
@@ -186,9 +191,19 @@ public final class Constants {
     public static final String DRUID_CLUSTERS = "druidClusters";
 
     /**
+     * Constant for 'slackChannels', when passing a list of channels to the UI.
+     */
+    public static final String SLACK_CHANNELS = "slackChannels";
+
+    /**
      * Constant for 'emailError'.
      */
     public static final String EMAIL_ERROR = "emailError";
+
+    /**
+     * Constant for 'slackError'.
+     */
+    public static final String SLACK_ERROR = "slackError";
 
     /**
      * The number of milliseconds in a minute.

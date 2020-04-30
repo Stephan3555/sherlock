@@ -16,9 +16,11 @@ import com.yahoo.sherlock.exception.ClusterNotFoundException;
 import com.yahoo.sherlock.exception.DruidException;
 import com.yahoo.sherlock.exception.SchedulerException;
 import com.yahoo.sherlock.exception.SherlockException;
+import com.yahoo.sherlock.exception.SlackNotFoundException;
 import com.yahoo.sherlock.model.AnomalyReport;
 import com.yahoo.sherlock.model.DruidCluster;
 import com.yahoo.sherlock.model.JobMetadata;
+import com.yahoo.sherlock.model.SlackMetaData;
 import com.yahoo.sherlock.query.EgadsConfig;
 import com.yahoo.sherlock.query.Query;
 import com.yahoo.sherlock.query.QueryBuilder;
@@ -28,6 +30,7 @@ import com.yahoo.sherlock.store.AnomalyReportAccessor;
 import com.yahoo.sherlock.store.DruidClusterAccessor;
 import com.yahoo.sherlock.store.EmailMetadataAccessor;
 import com.yahoo.sherlock.store.JobMetadataAccessor;
+import com.yahoo.sherlock.store.SlackMetadataAccessor;
 import com.yahoo.sherlock.store.Store;
 import com.yahoo.sherlock.utils.TimeUtils;
 
@@ -77,6 +80,11 @@ public class JobExecutionService {
     private EmailMetadataAccessor emailMetadataAccessor;
 
     /**
+     * Class slack metadata accessor instance.
+     */
+    private SlackMetadataAccessor slackMetadataAccessor;
+
+    /**
      * Create the service and grab references to the necessary
      * accessors and services.
      */
@@ -86,6 +94,7 @@ public class JobExecutionService {
         jobMetadataAccessor = Store.getJobMetadataAccessor();
         anomalyReportAccessor = Store.getAnomalyReportAccessor();
         emailMetadataAccessor = Store.getEmailMetadataAccessor();
+        slackMetadataAccessor = Store.getSlackMetadataAccessor();
     }
 
     /**
@@ -108,24 +117,41 @@ public class JobExecutionService {
                 unscheduleErroredJob(job);
             }
             EmailService emailService = serviceFactory.newEmailServiceInstance();
+            SlackService slackService = serviceFactory.newSlackServiceInstance();
             if (reports.isEmpty()) {
                 AnomalyReport report = getSingletonReport(job);
                 reports.add(report);
             }
             List<String> originalEmailList = job.getOwnerEmail() == null || job.getOwnerEmail().isEmpty() ? new ArrayList<>() :
-                                             Arrays.stream(job.getOwnerEmail().split(Constants.COMMA_DELIMITER)).collect(Collectors.toList());
+                    Arrays.stream(job.getOwnerEmail().split(Constants.COMMA_DELIMITER)).collect(Collectors.toList());
             List<String> finalEmailList = new ArrayList<>();
+            SlackMetaData slackMetaData = slackMetadataAccessor.getSlackMetadata(job.getOwnerSlackId());
             if (reports.get(0).getStatus().equalsIgnoreCase(Constants.ERROR)) {
                 emailService.processEmailReports(job, originalEmailList, reports);
-                anomalyReportAccessor.putAnomalyReports(reports, finalEmailList);
-            } else if (!((finalEmailList = emailMetadataAccessor.checkEmailsInInstantIndex(originalEmailList)).isEmpty())) {
-                emailService.processEmailReports(job, finalEmailList, reports);
-                originalEmailList.removeAll(finalEmailList);
-                anomalyReportAccessor.putAnomalyReports(reports, originalEmailList);
+                slackService.processSlackReports(job, Arrays.asList(slackMetaData), reports);
+                anomalyReportAccessor.putAnomalyReportsForEmails(reports, finalEmailList);
+                anomalyReportAccessor.putAnomalyReportsForSlacks(reports, Arrays.asList(job.getOwnerSlackId()));
             } else {
-                anomalyReportAccessor.putAnomalyReports(reports, originalEmailList);
+                if (!((finalEmailList = emailMetadataAccessor.checkEmailsInInstantIndex(originalEmailList)).isEmpty())) {
+                    emailService.processEmailReports(job, finalEmailList, reports);
+                    originalEmailList.removeAll(finalEmailList);
+                    anomalyReportAccessor.putAnomalyReportsForEmails(reports, originalEmailList);
+                } else {
+                    anomalyReportAccessor.putAnomalyReportsForEmails(reports, originalEmailList);
+                }
+
+                if (!((slackMetadataAccessor.checkSlacksInInstantIndex(Arrays.asList(job.getOwnerSlackId()))).isEmpty())) {
+                    slackService.processSlackReports(job, Arrays.asList(slackMetaData), reports);
+                    anomalyReportAccessor.putAnomalyReportsForSlacks(reports, Arrays.asList(job.getOwnerSlackId()));
+                } else {
+                    anomalyReportAccessor.putAnomalyReportsForSlacks(reports, Arrays.asList(job.getOwnerSlackId()));
+                }
+
             }
         } catch (IOException e) {
+            log.error("Error while putting anomaly reports to database!", e);
+        } catch (SlackNotFoundException e) {
+            log.error("Slack with ID " + job.getOwnerSlackId() + " could not be found!", e);
             log.error("Error while putting anomaly reports to database!", e);
         }
     }
@@ -153,7 +179,7 @@ public class JobExecutionService {
      *
      * @param job       metadata for job to backfill
      * @param startTime the start time of backfilling as a ZonedDateTime
-     * @param endTime the end time of backfilling as a ZonedDateTime
+     * @param endTime   the end time of backfilling as a ZonedDateTime
      * @throws SherlockException if an error occurs during job execution
      */
     public void performBackfillJob(
@@ -201,13 +227,13 @@ public class JobExecutionService {
      * then at each incremented granularity after that
      * date a certain number of times.
      *
-     * @param job              the job details
-     * @param cluster          the druid cluster for the job
-     * @param query            druid query to get the data
-     * @param start            start of backfill job window
-     * @param end              end of backfill job window
-     * @param granularity      the data granularity
-     * @param intervals        intervals to lookback
+     * @param job         the job details
+     * @param cluster     the druid cluster for the job
+     * @param query       druid query to get the data
+     * @param start       start of backfill job window
+     * @param end         end of backfill job window
+     * @param granularity the data granularity
+     * @param intervals   intervals to lookback
      * @throws SherlockException    if an error occurs during processing
      * @throws DruidException       if an error occurs during quering druid
      * @throws InterruptedException if an error occurs in the thread
@@ -223,8 +249,8 @@ public class JobExecutionService {
             int intervals
     ) throws SherlockException, DruidException, InterruptedException, IOException {
         log.info("Performing backfill for job [{}] for time range ({}, {})", job.getJobId(),
-                 TimeUtils.getTimeFromSeconds(start * 60L, Constants.TIMESTAMP_FORMAT_NO_SECONDS),
-                 TimeUtils.getTimeFromSeconds(end * 60L, Constants.TIMESTAMP_FORMAT_NO_SECONDS));
+                TimeUtils.getTimeFromSeconds(start * 60L, Constants.TIMESTAMP_FORMAT_NO_SECONDS),
+                TimeUtils.getTimeFromSeconds(end * 60L, Constants.TIMESTAMP_FORMAT_NO_SECONDS));
         log.info("Job granularity is [{}]", granularity.toString());
         DetectorService detectorService = serviceFactory.newDetectorServiceInstance();
         TimeSeriesParserService parserService = serviceFactory.newTimeSeriesParserServiceInstance();
@@ -253,17 +279,17 @@ public class JobExecutionService {
             threads.get(i).join();
             reports.addAll(tasks.get(i).getReports());
         }
-        anomalyReportAccessor.putAnomalyReports(reports, new ArrayList<>());
+        anomalyReportAccessor.putAnomalyReportsForEmails(reports, new ArrayList<>());
         log.info("Backfill is complete");
     }
 
     /**
      * Create a new egads task.
      *
-     * @param job               the job to run
-     * @param effectiveQueryEndTime  the effective endtime of subquery
-     * @param series            time series data
-     * @param detectorService   the detector service instance to use
+     * @param job                   the job to run
+     * @param effectiveQueryEndTime the effective endtime of subquery
+     * @param series                time series data
+     * @param detectorService       the detector service instance to use
      * @return an egads task
      */
     protected EgadsTask createTask(
@@ -371,7 +397,7 @@ public class JobExecutionService {
         if (anomalies.isEmpty()) {
             return Lists.newArrayList(0);
         }
-        int  allReportWithNoData = 0;
+        int allReportWithNoData = 0;
         List<AnomalyReport> reports = new ArrayList<>(anomalies.size());
         for (Anomaly anomaly : anomalies) {
             AnomalyReport report = AnomalyReport.createReport(anomaly, job);

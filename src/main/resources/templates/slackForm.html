@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+
+<head th:replace="fragments/head :: head"></head>
+
+<body>
+<!-- Wrapper -->
+<div id="wrapper">
+	<!-- Sidebar -->
+	<div id="sidebar-wrapper" th:replace="fragments/nav :: nav"></div>
+	<!-- #Sidebar -->
+
+	<!-- Page Content -->
+	<div id="page-content-wrapper">
+		<div class="container-fluid">
+			<div class="row">
+				<div class="col-lg-12">
+					<h1 th:text="${title}">TITLE</h1>
+					<div th:if="${error != null}" th:text="${error}" class="alert alert-danger" role="alert">Error message</div>
+					<form id="clusterForm" method='post'>
+						<fieldset>
+
+							<div class="form-group" th:if="${instantView == null}">
+
+
+								<label class="form-group" for="owner-slack-id">Slack ID:</label>
+								<p class="bg-info">Unique name for the Slack configuration. Saving a slack configuration with the same Slack ID will override the old one.</p>
+								<div>
+									<input type="text" id="owner-slack-id" name="owner-slack-id"
+										   placeholder="Slack Webhook name (Unique Mandatory field)"
+										   class="form-control input-md" required="true"/>
+								</div>
+
+								<label class="form-group" for="owner-slack-webhook">Slack Webhook Url:</label>
+								<p class="bg-info">The Webhook Url to send the message to. To obtain a Webhook URL follow the <a href="https://api.slack.com/messaging/webhooks">official Slack Guide</a>.</p>
+								<div>
+									<input type="text" id="owner-slack-webhook" name="owner-slack-webhook"
+										   placeholder="https://hooks.slack.com/services/xxxx/xxxx/xxxx (Mandatory field)"
+										   class="form-control input-md" required="true"/>
+								</div>
+
+								<label class="form-group" for="owner-slack-username">Slack Username:</label>
+								<p class="bg-info">Set a username for the bot's message.</p>
+								<div>
+									<input type="text" id="owner-slack-username" name="owner-slack-username"
+										   placeholder="Sherlock-Notification (Mandatory field)"
+										   class="form-control input-md" required="true"/>
+								</div>
+
+								<label class="form-group" for="owner-slack-icon-emoji">Slack Icon Emoji:</label>
+								<p class="bg-info">Provide an Emoji to use as the icon for the bot's message.</p>
+								<div>
+									<input type="text" id="owner-slack-icon-emoji" name="owner-slack-icon-emoji"
+										   placeholder=":sherlock: (Optional)"
+										   class="form-control input-md"/>
+								</div>
+
+								<label class="form-group" for="owner-slack-mention">Slack Mention:</label>
+								<p class="bg-info">Mention a user or a group when notitfying in a channel. Use special mentions like <code>@here</code>, <code>@channel</code> or <code>@everyone</code>. If you want to mention a specific user you have to use his member ID, e.g <code>@U023BE7LH</code>.</p>
+								<div>
+									<input type="text" id="owner-slack-mention" name="owner-slack-mention"
+										   placeholder="@Channel (Optional)"
+										   class="form-control input-md"/>
+								</div>
+
+
+							</div>
+
+							<div class="form-group">
+								<label class="control-label" for="saveCluster">Actions:</label><br/>
+								<input id="saveCluster" type="submit" class="btn btn-success" value="Save"/>
+							</div>
+						</fieldset>
+					</form>
+				</div>
+			</div>
+		</div>
+	</div>
+	<!-- #Page Content -->
+
+	<!-- save confirmation -->
+	<div id="saveConfirmModal" class="modal fade" role="dialog">
+		<div class="modal-dialog">
+			<!-- Modal content-->
+			<div class="modal-content">
+				<div class="modal-body">
+					<p id="saveConfirmModalCode">Add this slack?</p>
+				</div>
+				<div class="modal-footer">
+					<button type="button" data-dismiss="modal" class="btn btn-primary" id="saveConfirmModalYes">Yes</button>
+					<button type="button" data-dismiss="modal" class="btn" id="saveConfirmModalNo">No</button>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+<!-- #Wrapper -->
+
+<script language="javascript" type="text/javascript" th:inline="javascript">
+
+	$(document).ready(function() {
+		$("#clusterForm").submit(function(e) {
+			e.preventDefault();
+			$('#saveConfirmModalCode').html();
+			$('#saveConfirmModal').modal('show');
+		});
+	});
+
+	$("#saveConfirmModalYes").click(function() {
+
+		var data = {};
+		data.slackId = $('#owner-slack-id').val();
+		data.slackWebhookUrl = $('#owner-slack-webhook').val();
+		data.slackUsername = $('#owner-slack-username').val();
+		data.slackIconEmoji = $('#owner-slack-icon-emoji').val();
+		data.slackMention = $('#owner-slack-mention').val();
+
+
+		$.ajax({
+			type: 'POST',
+			url: '/Slack/NewSlack',
+			data: JSON.stringify(data),
+			contentType: "application/json",
+			dataType: 'text',
+			success: function (response) {
+				if ($.isEmptyObject(response)) {
+					// Else there was a warning, but not a failure
+					showWarningMessage("Something went wrong! Try again.");
+				} else {
+					window.document.location = '/Meta-Manager';
+					showInfoMessage("Cluster saved successfully");
+				}
+			},
+			error : ajaxMessage
+		});
+	});
+
+	$("form input[type=submit]").click(function() {
+		$("input[type=submit]", $(this).parents("form")).removeAttr("clicked");
+		$(this).attr("clicked", "true");
+	});
+
+	$("#saveConfirmModalNo").click(function() {
+		showWarningMessage("Cluster was not added.");
+	});
+</script>
+
+</body>
+
+</html>

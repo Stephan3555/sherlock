@@ -119,8 +119,8 @@ public class LettuceAnomalyReportAccessorTest {
         );
         mocks();
         when(ara.newIds(anyInt())).thenReturn(new Integer[] {3, 4});
-        doCallRealMethod().when(ara).putAnomalyReports(anyList(), anyList());
-        ara.putAnomalyReports(reports, Arrays.asList("aa@email.com"));
+        doCallRealMethod().when(ara).putAnomalyReportsForEmails(anyList(), anyList());
+        ara.putAnomalyReportsForEmails(reports, Arrays.asList("aa@email.com"));
         verify(ara).newIds(2);
         verify(async, times(16)).sadd(anyString(), anyString());
         verify(async, times(4)).hmset(anyString(), anyMap());
@@ -128,7 +128,7 @@ public class LettuceAnomalyReportAccessorTest {
         verify(ara).awaitRaw(anyCollection());
         // verify reports with no anomaly timestamps
         reports.get(0).setAnomalyTimestamps(null);
-        ara.putAnomalyReports(reports, Arrays.asList("aa@email.com", "bb@email.com"));
+        ara.putAnomalyReportsForEmails(reports, Arrays.asList("aa@email.com", "bb@email.com"));
         verify(ara).newIds(2);
         verify(async, times(36)).sadd(anyString(), anyString());
         verify(async, times(8)).hmset(anyString(), anyMap());

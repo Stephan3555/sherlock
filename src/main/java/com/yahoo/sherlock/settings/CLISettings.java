@@ -90,9 +90,39 @@ public class CLISettings {
     public static int INTERVAL_MONTHS = 6;
 
     /**
+     * Enable slack service.
+     */
+    @Parameter(names = "--enable-slack", description = "Enable the slack service. This enables users to receive email anomaly report notifications.")
+    public static boolean ENABLE_SLACK = false;
+
+    /**
+     * Job slack webhook for failures.
+     */
+    @Parameter(names = "--failure-slack-webhook-url", description = "slack webhook to recieve pipeline failures.")
+    public static String FAILURE_SLACK_WEBHOOK_URL;
+
+    /**
+     * Job slack username for failures.
+     */
+    @Parameter(names = "--failure-slack-username", description = "slack username to recieve pipeline failures.")
+    public static String FAILURE_SLACK_USERNAME;
+
+    /**
+     * Job slack icon emoji for failures.
+     */
+    @Parameter(names = "--failure-slack-icon-emoji", description = "slack icon emoji to recieve pipeline failures.")
+    public static String FAILURE_SLACK_ICON_EMOJI;
+
+    /**
+     * Job slack icon emoji for failures.
+     */
+    @Parameter(names = "--failure-slack-mention", description = "slack icon mention to recieve pipeline failures.")
+    public static String FAILURE_SLACK_MENTION;
+
+    /**
      * Enable email service.
      */
-    @Parameter(names = "--enable-email", description = "training period for egads model for week granularity.")
+    @Parameter(names = "--enable-email", description = "Enable the email service. This enables users to receive email anomaly report notifications.")
     public static boolean ENABLE_EMAIL = false;
 
     /**

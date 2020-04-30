@@ -181,7 +181,7 @@ public class EmailService {
                     log.error("Error while sending failure email!");
                 }
             } else if (isNoDataCase(anomalyReports)) {
-                if (job.getEmailOnNoData()) {
+                if (job.getNotificationOnNoData()) {
                     if (!sendEmail(job.getOwner(), emails, anomalyReports)) {
                         log.error("Error while sending Nodata email!");
                     }

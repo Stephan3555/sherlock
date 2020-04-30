@@ -45,22 +45,40 @@
                             </div>
 
                             <div class="form-group" th:if="${instantView == null}">
-                                <label class="control-label" for="owner-email">Owner's Email (for anomaly alerts):</label>
+                                <label class="control-label" for="owner-email">Owner's Email (for anomaly
+                                    alerts):</label>
                                 <div>
-                                    <input type="text"  id="owner-email" name="owner-email"
+                                    <input type="text" id="owner-email" name="owner-email"
                                            placeholder="Enter the email[s] and hit enter"
                                            class="form-control input-md"/>
                                 </div>
                             </div>
 
                             <div class="form-group" th:if="${instantView == null}">
-                                <label class="control-label" for="emailOnNoData">Get email if new datapoint is not available:</label>
-                                <div id="emailOnNoData">
-                                    <input type="radio" id="emailOnNoDataYes" name="emailOnNoData" value="true"/>
-                                    <label class="control-label" for="emailOnNoDataYes">YES</label>
+                                <label class="control-label">Owner's Slack Channel (for anomaly alerts):</label>
+                                <label class="control-label" for="slackId">Slack:</label>
+                                <p id="defaultslackIdMsg" class="bg-info">Select a Slack ID:</p>
+                                <select id="slackId" class="form-control" name="slackId"
+                                        th:field="${slackId}" th:required="true">
+                                    <option th:each="slackChannel : ${slackChannels}"
+                                            th:value="${slackChannel.getSlackId()}"
+                                            th:selected="false"
+                                            th:attr="webhook-url=${slackChannel.getSlackWebhookUrl()}"
+                                            th:text="${slackChannel.getSlackId()}"></option>
+                                </select>
+                            </div>
+
+                            <div class="form-group" th:if="${instantView == null}">
+                                <label class="control-label" for="notificationOnNoData">Get notification if new
+                                    datapoint is not available:</label>
+                                <div id="notificationOnNoData">
+                                    <input type="radio" id="notificationOnNoDataYes" name="notificationOnNoData"
+                                           value="true"/>
+                                    <label class="control-label" for="notificationOnNoDataYes">YES</label>
                                     <span>&nbsp;&nbsp;&nbsp;</span>
-                                    <input type="radio" id="emailOnNoDataNo" name="emailOnNoData" value="false" checked="true"/>
-                                    <label class="control-label" for="emailOnNoDataNo">NO</label>
+                                    <input type="radio" id="notificationOnNoDataNo" name="notificationOnNoData"
+                                           value="false" checked="true"/>
+                                    <label class="control-label" for="notificationOnNoDataNo">NO</label>
                                 </div>
                             </div>
 
@@ -106,7 +124,8 @@
                                 <label class="control-label" for="queryEndTimeText">Query End Time:(oprtional)</label>
                                 <p id="queryEndTimeMsg" class="bg-info">Use this for custom query time-range.
                                     <code>Default: 'Date.now()' i.e. current date</code></p>
-                                <input type="text" id="queryEndTimeText" name="queryEndTimeText" class="form-control input-md" th:required="true" autocomplete="false"/>
+                                <input type="text" id="queryEndTimeText" name="queryEndTimeText"
+                                       class="form-control input-md" th:required="true" autocomplete="false"/>
                             </div>
 
                             <div class="form-group" id="granularitySection">
@@ -115,7 +134,8 @@
                                     <code>Default: '1 day'</code></p>
                                 <div>
                                     <input id="granularityRange" name="granularityRange" type="number"
-                                           class="form-control input-md" size="25" min="1" th:max="${DAY}" value="1" onchange="selectGranularityMsg()"/>
+                                           class="form-control input-md" size="25" min="1" th:max="${DAY}" value="1"
+                                           onchange="selectGranularityMsg()"/>
                                     <select id="granularity" name="granularity" class="form-control"
                                             th:field="*{granularity}" th:required="true" onchange="selectPeriod()">
                                         <option th:each="granularity : ${granularities}"
@@ -131,7 +151,8 @@
                                 <p id="textForTimeseriesRangeHelp" class="bg-info"></p>
                                 <div>
                                     <input id="timeseriesRange" name="timeseriesRange" type="number"
-                                           class="form-control input-md" size="25" th:value="${day}" th:required="true" onchange="changeDetectionWindowMax()"/>
+                                           class="form-control input-md" size="25" th:value="${day}" th:required="true"
+                                           onchange="changeDetectionWindowMax()"/>
                                 </div>
                             </div>
 
@@ -140,7 +161,8 @@
                                 <p id="textForDetectionWindowHelp" class="bg-info"></p>
                                 <div>
                                     <input id="detectionWindow" name="detectionWindow" type="number"
-                                           class="form-control input-md" size="25" min="1" th:max="${day}" th:required="true"/>
+                                           class="form-control input-md" size="25" min="1" th:max="${day}"
+                                           th:required="true"/>
                                 </div>
                             </div>
 
@@ -252,7 +274,8 @@
             <!-- Modal content-->
             <div class="modal-content">
                 <div class="modal-body">
-                    <p id="cronConfirmModalCode">Ready to launch the job (YES action won't launch, it just redirects to job launching page)?</p>
+                    <p id="cronConfirmModalCode">Ready to launch the job (YES action won't launch, it just redirects to
+                        job launching page)?</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" data-dismiss="modal" class="btn btn-primary" id="cronConfirmModalYes">Yes
@@ -281,19 +304,20 @@
     });
 
     $('#owner-email')
-          .on('tokenfield:createdtoken', function (e) {
-            // Über-simplistic e-mail validation
+        .on('tokenfield:createdtoken', function (e) {
+            // uber-simplistic e-mail validation
             var re = /\S+@\S+\.\S+/
             var valid = re.test(e.attrs.value)
             if (!valid) {
-              $(e.relatedTarget).addClass('invalid')
+                $(e.relatedTarget).addClass('invalid')
             }
-          })
-          .tokenfield({showAutocompleteOnFocus: false});
+        })
+        .tokenfield({showAutocompleteOnFocus: false});
 
     $("#popoverInfo").load('/content/kSigmaTable.html #sensitivityTable');
 
     const $druidCluster = $('#druidCluster');
+    const $slackId = $('#slackId');
 
     $(document).ready(function () {
         $('[data-toggle="popover"]').popover({
@@ -372,7 +396,8 @@
         data.testName = $('#test-name').val();
         data.owner = $('#owner-name').val();
         data.ownerEmail = $('#owner-email').tokenfield('getTokensList', ',');
-        data.emailOnNoData = $('input[name=emailOnNoData]:checked', '#queryForm').val();
+        data.ownerSlackId = $slackId.val();
+        data.notificationOnNoData = $('input[name=notificationOnNoData]:checked', '#queryForm').val();
         data.testDescription = $('#test-description').val();
         data.granularity = $('#granularity').val();
         data.granularityRange = $('#granularityRange').val();
@@ -446,7 +471,7 @@
 
     function selectGranularityMsg() {
         firstLoad++;
-        if(firstLoad > 1) {
+        if (firstLoad > 1) {
             $('#defaultGranularityMsg').html($('#granularityRange').val() + " " + $('#granularity').val() + "(s)")
         }
     }
@@ -454,33 +479,33 @@
     function selectPeriod() {
         $('#textForDetectionWindowHelp').html("Enter number of past <code>" + $('#granularity').val() + "s</code> in timeseries for detection");
         $('#textForTimeseriesRangeHelp').html("Enter number of <code>" + $('#granularity').val() + "s</code> to lookback(train) for anomaly detection.");
-        if($('#granularity').val() === "minute") {
+        if ($('#granularity').val() === "minute") {
             $('#detectionWindow').attr("max", [[${minute}]]);
             $('#timeseriesRange').val([[${minute}]]);
             $('#detectionWindow').attr("placeholder", "max " + [[${minute}]]);
             $('#granularityRange').attr("max", [[${MINUTE}]]);
             $('#defaultGranularityMsg').html($('#granularityRange').val() + " minute(s)")
-        } else if($('#granularity').val() === "hour") {
+        } else if ($('#granularity').val() === "hour") {
             $('#detectionWindow').attr("max", [[${hour}]]);
             $('#timeseriesRange').val([[${hour}]]);
             $('#detectionWindow').attr("placeholder", "max " + [[${hour}]]);
             $('#granularityRange').attr("max", [[${HOUR}]]);
             $('#defaultGranularityMsg').html($('#granularityRange').val() + " hour(s)")
-        } else if($('#granularity').val() === "day") {
+        } else if ($('#granularity').val() === "day") {
             $('#detectionWindow').attr("max", [[${day}]]);
             $('#timeseriesRange').val([[${day}]]);
             $('#detectionWindow').attr("placeholder", "max " + [[${day}]]);
             $('#granularityRange').attr("max", [[${DAY}]]);
-            if(firstLoad > 1) {
+            if (firstLoad > 1) {
                 $('#defaultGranularityMsg').html($('#granularityRange').val() + " day(s)")
             }
-        } else if($('#granularity').val() === "week") {
+        } else if ($('#granularity').val() === "week") {
             $('#detectionWindow').attr("max", [[${week}]]);
             $('#timeseriesRange').val([[${week}]]);
             $('#detectionWindow').attr("placeholder", "max " + [[${week}]]);
             $('#granularityRange').attr("max", [[${WEEK}]]);
             $('#defaultGranularityMsg').html($('#granularityRange').val() + " week(s)")
-        } else if($('#granularity').val() === "month") {
+        } else if ($('#granularity').val() === "month") {
             $('#detectionWindow').attr("max", [[${month}]]);
             $('#timeseriesRange').val([[${month}]]);
             $('#detectionWindow').attr("placeholder", "max " + [[${month}]]);

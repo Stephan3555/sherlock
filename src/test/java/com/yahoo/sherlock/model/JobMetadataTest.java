@@ -22,7 +22,7 @@ public class JobMetadataTest {
         jobMetadata.setJobId(1);
         jobMetadata.setOwner("b");
         jobMetadata.setOwnerEmail("c");
-        jobMetadata.setEmailOnNoData(false);
+        jobMetadata.setNotificationOnNoData(false);
         jobMetadata.setUserQuery("d");
         jobMetadata.setQuery("e");
         jobMetadata.setTestName("f");
@@ -63,7 +63,7 @@ public class JobMetadataTest {
         assertEquals(m.getClusterId(), (Integer) 2);
         assertEquals(m.getOwner(), "b");
         assertEquals(m.getOwnerEmail(), "c");
-        assertFalse(m.getEmailOnNoData());
+        assertFalse(m.getNotificationOnNoData());
         assertEquals(m.getUserQuery(), "d");
         assertEquals(m.getQuery(), "e");
         assertEquals(m.getTestName(), "f");
@@ -94,7 +94,7 @@ public class JobMetadataTest {
         assertEquals(mCloned.getClusterId(), (Integer) 2);
         assertEquals(mCloned.getOwner(), "b");
         assertEquals(mCloned.getOwnerEmail(), "c");
-        assertFalse(mCloned.getEmailOnNoData());
+        assertFalse(mCloned.getNotificationOnNoData());
         assertEquals(mCloned.getUserQuery(), "d");
         assertEquals(mCloned.getQuery(), "e");
         assertEquals(mCloned.getTestName(), "f");
@@ -120,7 +120,7 @@ public class JobMetadataTest {
         assertEquals(mCopy.getClusterId(), (Integer) 2);
         assertEquals(mCopy.getOwner(), "b");
         assertEquals(mCopy.getOwnerEmail(), "c");
-        assertFalse(mCopy.getEmailOnNoData());
+        assertFalse(mCopy.getNotificationOnNoData());
         assertEquals(mCopy.getUserQuery(), "d");
         assertEquals(mCopy.getQuery(), "e");
         assertEquals(mCopy.getTestName(), "f");

@@ -9,9 +9,11 @@ package com.yahoo.sherlock.service;
 import com.google.gson.JsonArray;
 import com.yahoo.sherlock.exception.DruidException;
 import com.yahoo.sherlock.exception.SherlockException;
+import com.yahoo.sherlock.exception.SlackNotFoundException;
 import com.yahoo.sherlock.model.AnomalyReport;
 import com.yahoo.sherlock.model.DruidCluster;
 import com.yahoo.sherlock.model.JobMetadata;
+import com.yahoo.sherlock.model.SlackMetaData;
 import com.yahoo.sherlock.query.Query;
 import com.yahoo.sherlock.scheduler.EgadsTask;
 import com.yahoo.sherlock.settings.Constants;
@@ -27,6 +29,7 @@ import com.yahoo.egads.data.Anomaly;
 import com.yahoo.egads.data.MetricMeta;
 import com.yahoo.egads.data.TimeSeries;
 
+import com.yahoo.sherlock.store.SlackMetadataAccessor;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -82,7 +85,9 @@ public class JobExecutionServiceTest {
     private DetectorService ds;
     private SchedulerService ss;
     private EmailService es;
+    private SlackService sls;
     private EmailMetadataAccessor ema;
+    private SlackMetadataAccessor sma;
     private TimeSeriesParserService ps;
 
     private void initMocks() {
@@ -93,15 +98,19 @@ public class JobExecutionServiceTest {
         ds = mock(DetectorService.class);
         ss = mock(SchedulerService.class);
         es = mock(EmailService.class);
+        sls = mock(SlackService.class);
         ara = mock(AnomalyReportAccessor.class);
         ps = mock(TimeSeriesParserService.class);
         ema = mock(EmailMetadataAccessor.class);
+        sma = mock(SlackMetadataAccessor.class);
         inject(jes, sf);
         inject(jes, dca);
         inject(jes, jma);
         inject(jes, "anomalyReportAccessor", ara);
         inject(jes, "emailMetadataAccessor", ema);
+        inject(jes, "slackMetadataAccessor", sma);
         when(sf.newEmailServiceInstance()).thenReturn(es);
+        when(sf.newSlackServiceInstance()).thenReturn(sls);
         when(sf.newSchedulerServiceInstance()).thenReturn(ss);
         when(sf.newDetectorServiceInstance()).thenReturn(ds);
         when(sf.newTimeSeriesParserServiceInstance()).thenReturn(ps);
@@ -120,29 +129,30 @@ public class JobExecutionServiceTest {
     }
 
     @Test
-    public void testExecute() throws SherlockException, IOException {
+    public void testExecute() throws SherlockException, IOException, SlackNotFoundException {
         initMocks();
         doCallRealMethod().when(jes).execute(any(JobMetadata.class));
         AnomalyReport anomalyReport = DBTestHelper.getNewReport();
         anomalyReport.setStatus(Constants.WARNING);
         when(jes.getReports(any(), any())).thenReturn(Collections.singletonList(anomalyReport));
         when(ema.checkEmailsInInstantIndex(anyList())).thenReturn(new ArrayList());
+        when(sma.getSlackMetadata(anyString())).thenReturn(new SlackMetaData());
         jes.execute(DBTestHelper.getNewJob());
         verify(jes, times(1)).execute(any(JobMetadata.class));
         verify(es, times(0)).processEmailReports(any(JobMetadata.class), anyList(), anyListOf(AnomalyReport.class));
-        verify(ara, times(1)).putAnomalyReports(anyListOf(AnomalyReport.class), anyList());
+        verify(ara, times(1)).putAnomalyReportsForEmails(anyListOf(AnomalyReport.class), anyList());
         // check for instant email found in the index
         when(ema.checkEmailsInInstantIndex(anyList())).thenReturn(Arrays.asList("email"));
         jes.execute(DBTestHelper.getNewJob());
         verify(jes, times(2)).execute(any(JobMetadata.class));
         verify(es, times(1)).processEmailReports(any(JobMetadata.class), anyList(), anyListOf(AnomalyReport.class));
-        verify(ara, times(2)).putAnomalyReports(anyListOf(AnomalyReport.class), anyList());
+        verify(ara, times(2)).putAnomalyReportsForEmails(anyListOf(AnomalyReport.class), anyList());
         // check for error report case
         anomalyReport.setStatus(Constants.ERROR);
         jes.execute(DBTestHelper.getNewJob());
         verify(jes, times(3)).execute(any(JobMetadata.class));
         verify(es, times(2)).processEmailReports(any(JobMetadata.class), anyList(), anyListOf(AnomalyReport.class));
-        verify(ara, times(3)).putAnomalyReports(anyListOf(AnomalyReport.class), anyList());
+        verify(ara, times(3)).putAnomalyReportsForEmails(anyListOf(AnomalyReport.class), anyList());
     }
 
     @Test
@@ -281,7 +291,7 @@ public class JobExecutionServiceTest {
         JobMetadata j = DBTestHelper.getNewJob();
         DruidCluster c = new DruidCluster();
         jes.performBackfillJob(j, c, query, 123, 128, Granularity.HOUR, 10);
-        verify(ara, times(1)).putAnomalyReports(any(), anyList());
+        verify(ara, times(1)).putAnomalyReportsForEmails(any(), anyList());
     }
 
     @Test

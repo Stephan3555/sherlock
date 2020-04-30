@@ -15,12 +15,12 @@ import com.yahoo.sherlock.scheduler.BackupTask;
 import com.yahoo.sherlock.scheduler.EmailSenderTask;
 import com.yahoo.sherlock.scheduler.ExecutionTask;
 import com.yahoo.sherlock.scheduler.RecoverableThreadScheduler;
+import com.yahoo.sherlock.scheduler.SlackSenderTask;
 import com.yahoo.sherlock.settings.CLISettings;
 import com.yahoo.sherlock.settings.Constants;
 import com.yahoo.sherlock.store.JobScheduler;
 import com.yahoo.sherlock.store.Store;
 import com.yahoo.sherlock.utils.TimeUtils;
-
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
@@ -80,6 +80,11 @@ public class SchedulerService {
     private EmailSenderTask emailSenderTask;
 
     /**
+     * Class slack sender task instance.
+     */
+    private SlackSenderTask slackSenderTask;
+
+    /**
      * Private singleton constructor.
      */
     private SchedulerService() {
@@ -89,6 +94,7 @@ public class SchedulerService {
         executionTask = null;
         backupTask = null;
         emailSenderTask = null;
+        slackSenderTask = null;
     }
 
     /**
@@ -139,7 +145,7 @@ public class SchedulerService {
     }
 
     /**
-     * Start the redis db backup task.
+     * Start the Email Sender task.
      */
     public void startEmailSenderScheduler() {
         log.info("Starting email sender task");
@@ -154,6 +160,24 @@ public class SchedulerService {
         int period = Constants.SECONDS_IN_MINUTE;
         int delay = 10;
         recoverableThreadScheduler.scheduleAtFixedRate(emailSenderTask, delay, period, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Start the Slack sender task.
+     */
+    public void startSlackSenderScheduler() {
+        log.info("Starting slack sender task");
+        if (slackSenderTask != null) {
+            log.info("Slack sender task has already been started");
+            return;
+        }
+        if (recoverableThreadScheduler == null) {
+            instantiateMasterScheduler();
+        }
+        slackSenderTask = new SlackSenderTask();
+        int period = Constants.SECONDS_IN_MINUTE;
+        int delay = 10;
+        recoverableThreadScheduler.scheduleAtFixedRate(slackSenderTask, delay, period, TimeUnit.SECONDS);
     }
 
     /**

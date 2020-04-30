@@ -6,6 +6,7 @@
 
 package com.yahoo.sherlock;
 
+import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -26,16 +27,18 @@ import com.yahoo.sherlock.model.EmailMetaData;
 import com.yahoo.sherlock.model.JobMetadata;
 import com.yahoo.sherlock.model.JobTimeline;
 import com.yahoo.sherlock.model.JsonTimeline;
+import com.yahoo.sherlock.model.SlackMetaData;
 import com.yahoo.sherlock.model.UserQuery;
 import com.yahoo.sherlock.query.EgadsConfig;
 import com.yahoo.sherlock.query.Query;
 import com.yahoo.sherlock.query.QueryBuilder;
-import com.yahoo.sherlock.service.JobExecutionService;
-import com.yahoo.sherlock.service.SchedulerService;
 import com.yahoo.sherlock.service.DetectorService;
 import com.yahoo.sherlock.service.DruidQueryService;
 import com.yahoo.sherlock.service.EmailService;
+import com.yahoo.sherlock.service.JobExecutionService;
+import com.yahoo.sherlock.service.SchedulerService;
 import com.yahoo.sherlock.service.ServiceFactory;
+import com.yahoo.sherlock.service.SlackService;
 import com.yahoo.sherlock.settings.CLISettings;
 import com.yahoo.sherlock.settings.Constants;
 import com.yahoo.sherlock.settings.DatabaseConstants;
@@ -45,15 +48,14 @@ import com.yahoo.sherlock.store.DruidClusterAccessor;
 import com.yahoo.sherlock.store.EmailMetadataAccessor;
 import com.yahoo.sherlock.store.JobMetadataAccessor;
 import com.yahoo.sherlock.store.JsonDumper;
+import com.yahoo.sherlock.store.SlackMetadataAccessor;
 import com.yahoo.sherlock.store.Store;
 import com.yahoo.sherlock.utils.BackupUtils;
 import com.yahoo.sherlock.utils.NumberUtils;
 import com.yahoo.sherlock.utils.TimeUtils;
 import com.yahoo.sherlock.utils.Utils;
-
-import org.apache.commons.lang3.tuple.ImmutablePair;
-
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 import spark.ModelAndView;
 import spark.Request;
 import spark.Response;
@@ -94,8 +96,10 @@ public class Routes {
     private static AnomalyReportAccessor reportAccessor;
     private static DruidClusterAccessor clusterAccessor;
     private static JobMetadataAccessor jobAccessor;
+    private static SlackMetadataAccessor slackAccessor;
     private static DeletedJobMetadataAccessor deletedJobAccessor;
     private static EmailMetadataAccessor emailMetadataAccessor;
+    private static SlackMetadataAccessor slackMetadataAccessor;
     private static JsonDumper jsonDumper;
     private static JobTimeline jobTimeline;
     private static Map<String, Object> instantReportParams;
@@ -117,6 +121,8 @@ public class Routes {
         defaultParams.put(Constants.FREQUENCIES, frequencies);
         defaultParams.put(Constants.EMAIL_HTML, null);
         defaultParams.put(Constants.EMAIL_ERROR, null);
+        defaultParams.put(Constants.SLACK_TEXT, null);
+        defaultParams.put(Constants.SLACK_ERROR, null);
         instantReportParams = new HashMap<>(defaultParams);
     }
 
@@ -131,13 +137,16 @@ public class Routes {
         // Grab references to the accessors, initializing them
         reportAccessor = Store.getAnomalyReportAccessor();
         clusterAccessor = Store.getDruidClusterAccessor();
+        slackAccessor = Store.getSlackMetadataAccessor();
         jobAccessor = Store.getJobMetadataAccessor();
         deletedJobAccessor = Store.getDeletedJobMetadataAccessor();
         emailMetadataAccessor = Store.getEmailMetadataAccessor();
+        slackMetadataAccessor = Store.getSlackMetadataAccessor();
         jsonDumper = Store.getJsonDumper();
         schedulerService.instantiateMasterScheduler();
         schedulerService.startMasterScheduler();
         schedulerService.startEmailSenderScheduler();
+        schedulerService.startSlackSenderScheduler();
         schedulerService.startBackupScheduler();
         jobTimeline = new JobTimeline();
     }
@@ -231,6 +240,7 @@ public class Routes {
             params.put(Constants.WEEK, Constants.MAX_WEEK);
             params.put(Constants.MONTH, Constants.MAX_MONTH);
             params.put(Constants.DRUID_CLUSTERS, clusterAccessor.getDruidClusterList());
+            params.put(Constants.SLACK_CHANNELS, slackAccessor.getAllSlackMetadata());
             params.put(Constants.TIMESERIES_MODELS, EgadsConfig.TimeSeriesModel.getAllValues());
             params.put(Constants.ANOMALY_DETECTION_MODELS, EgadsConfig.AnomalyDetectionModel.getAllValues());
         } catch (IOException e) {
@@ -294,7 +304,8 @@ public class Routes {
             tableParams.put(Constants.INSTANTVIEW, "true");
             tableParams.put(DatabaseConstants.ANOMALIES, reports);
             instantReportParams.put("tableHtml", thymeleaf.render(new ModelAndView(tableParams, "table")));
-            Type jsonType = new TypeToken<EgadsResult.Series[]>() { }.getType();
+            Type jsonType = new TypeToken<EgadsResult.Series[]>() {
+                }.getType();
             instantReportParams.put("data", new Gson().toJson(EgadsResult.fuseResults(egadsResult), jsonType));
             instantReportParams.put("timeseriesNames", timeseriesNames);
         } catch (IOException | ClusterNotFoundException | DruidException | SherlockException e) {
@@ -471,6 +482,7 @@ public class Routes {
             JobMetadata job = jobAccessor.getJobMetadata(request.params(Constants.ID));
             params.put("job", job);
             params.put("clusterName", clusterAccessor.getDruidCluster(job.getClusterId()).getClusterName());
+            params.put(Constants.SLACK_CHANNELS, slackAccessor.getAllSlackMetadata());
             params.put(Constants.TITLE, "Job Details");
             params.put(Triggers.MINUTE.toString(), CLISettings.INTERVAL_MINUTES);
             params.put(Triggers.HOUR.toString(), CLISettings.INTERVAL_HOURS);
@@ -521,10 +533,23 @@ public class Routes {
 
     /**
      * Helper method to validate input email-ids from user.
+     *
      * @return true if email input field is valid else false
      */
     private static boolean validEmail(String emails, EmailService emailService) {
-        return emails == null || emails.isEmpty() || emailService.validateEmail(emails, emailService.getValidDomainsFromSettings());
+        return Strings.isNullOrEmpty(emails) || emailService.validateEmail(emails, emailService.getValidDomainsFromSettings());
+    }
+
+    /**
+     * Helper method to validate input email-ids from user.
+     *
+     * @return true if email input field is valid else false
+     */
+    private static boolean validSlack(String slackid, String webhookUrl, String username, String iconEmoji, String mention, SlackService slackService) {
+        return Strings.isNullOrEmpty(slackid) ||
+                Strings.isNullOrEmpty(webhookUrl) ||
+                Strings.isNullOrEmpty(username) ||
+                slackService.validateSlack(slackid, webhookUrl, username, iconEmoji, mention);
     }
 
     /**
@@ -545,12 +570,11 @@ public class Routes {
         try {
             // Parse user request and get existing job
             UserQuery userQuery = new Gson().fromJson(request.body(), UserQuery.class);
-            // Validate user email
-            EmailService emailService = serviceFactory.newEmailServiceInstance();
-            if (!validEmail(userQuery.getOwnerEmail(), emailService)) {
-                throw new SherlockException("Invalid owner email passed");
-            }
+
             JobMetadata currentJob = jobAccessor.getJobMetadata(jobId.toString());
+
+            validateEmail(userQuery);
+
             // Validate query change if any
             Query query = null;
             String newQuery = userQuery.getQuery().replaceAll(Constants.WHITESPACE_REGEX, "");
@@ -576,6 +600,23 @@ public class Routes {
             log.error("Exception while updating the job Info!", e);
             response.status(500);
             return e.getMessage();
+        }
+    }
+
+    private static void validateEmail(UserQuery userQuery) throws SherlockException {
+        // Validate user email
+        EmailService emailService = serviceFactory.newEmailServiceInstance();
+        if (!validEmail(userQuery.getOwnerEmail(), emailService)) {
+            throw new SherlockException("Invalid owner email passed");
+        }
+    }
+
+    private static void validateSlack(SlackMetaData slackMetaData) throws SherlockException {
+
+        // Validate user slack
+        SlackService slackService = serviceFactory.newSlackServiceInstance();
+        if (!validSlack(slackMetaData.getSlackId(), slackMetaData.getSlackWebhookUrl(), slackMetaData.getSlackUsername(), slackMetaData.getSlackIconEmoji(), slackMetaData.getSlackMention(), slackService)) {
+            throw new SherlockException("Invalid owner slack passed");
         }
     }
 
@@ -637,7 +678,7 @@ public class Routes {
                 // get jobinfo from database
                 jobMetadata = jobAccessor.getJobMetadata(id);
                 if (jobMetadata.getJobStatus().equalsIgnoreCase(JobStatus.RUNNING.getValue()) ||
-                    jobMetadata.getJobStatus().equalsIgnoreCase(JobStatus.NODATA.getValue())) {
+                        jobMetadata.getJobStatus().equalsIgnoreCase(JobStatus.NODATA.getValue())) {
                     continue;
                 }
                 DruidCluster cluster = clusterAccessor.getDruidCluster(jobMetadata.getClusterId());
@@ -765,15 +806,17 @@ public class Routes {
     /**
      * Rerun the job for given timestamp.
      * Request consist of job id and timestamp
-     * @param request HTTP request
+     *
+     * @param request  HTTP request
      * @param response HTTP response
      * @return status of request
      */
     public static String rerunJob(Request request, Response response) {
         try {
             Map<String, String> params = new Gson().fromJson(
-                request.body(),
-                new TypeToken<Map<String, String>>() { }.getType()
+                    request.body(),
+                    new TypeToken<Map<String, String>>() {
+                    }.getType()
             );
             Integer jobId = NumberUtils.parseInt(params.get("jobId"));
             Long start = NumberUtils.parseLong(params.get("timestamp"));
@@ -887,6 +930,18 @@ public class Routes {
     }
 
     /**
+     * This route returns the add new Salck form.
+     *
+     * @param request  HTTP request
+     * @param response HTTP response
+     * @return the Druid cluster form
+     */
+    public static ModelAndView viewNewSlackForm(Request request, Response response) {
+        Map<String, Object> params = new HashMap<>(defaultParams);
+        return new ModelAndView(params, "slackForm");
+    }
+
+    /**
      * This route adds a new Druid cluster to the database.
      *
      * @param request  the HTTP request containing the cluster parameters
@@ -913,6 +968,35 @@ public class Routes {
             return e.getMessage();
         }
     }
+
+    /**
+     * This route adds a new Slack Id to the database.
+     *
+     * @param request  the HTTP request containing the cluster parameters
+     * @param response HTTP response
+     * @return the new slack ID
+     */
+    public static String addNewSlack(Request request, Response response) {
+        log.info("Adding a new Slack ID");
+
+        try {
+            // Parse user request and get existing job
+            SlackMetaData slackMetaData = new Gson().fromJson(request.body(), SlackMetaData.class);
+
+            validateSlack(slackMetaData);
+
+            slackAccessor.putSlackMetadata(slackMetaData);
+
+
+            response.status(200);
+            return Constants.SUCCESS;
+        } catch (Exception e) {
+            log.error("Error occured while adding Slack ID!", e);
+            response.status(500);
+            return e.getMessage();
+        }
+    }
+
 
     /**
      * Method returns a populated table of the current Druid clusters.
@@ -1086,6 +1170,7 @@ public class Routes {
             params.put("jobs", jobAccessor.getJobMetadataList());
             params.put("queuedJobs", jsonDumper.getQueuedJobs());
             params.put("emails", emailMetadataAccessor.getAllEmailMetadata());
+            params.put("slacks", slackMetadataAccessor.getAllSlackMetadata());
         } catch (Exception e) {
             log.error("Fatal error while retrieving settings!", e);
             params.put(Constants.ERROR, e.getMessage());
@@ -1114,6 +1199,29 @@ public class Routes {
             halt(404, thymeleaf.render(new ModelAndView(params, "404")));
         }
         return new ModelAndView(params, "emailInfo");
+    }
+
+    /**
+     * Method to view metadata about selected slack.
+     *
+     * @param request  HTTP request
+     * @param response HTTP response
+     * @return object of ModelAndView
+     */
+    public static ModelAndView viewSlacks(Request request, Response response) {
+        Map<String, Object> params = new HashMap<>(defaultParams);
+        params.put(Constants.TITLE, "Slack Settings");
+        try {
+            List<String> triggers = Triggers.getAllValues();
+            triggers.remove(Triggers.MINUTE.toString());
+            params.put("slackTriggers", triggers);
+            params.put("slack", slackMetadataAccessor.getSlackMetadata(request.params(Constants.ID)));
+        } catch (Exception e) {
+            log.error("Fatal error while retrieving slack settings!", e);
+            params.put(Constants.ERROR, e.getMessage());
+            halt(404, thymeleaf.render(new ModelAndView(params, "404")));
+        }
+        return new ModelAndView(params, "slackInfo");
     }
 
     /**
@@ -1146,7 +1254,33 @@ public class Routes {
     }
 
     /**
+     * Method to update slack metadata as requested.
+     *
+     * @param request  HTTP request
+     * @param response HTTP response
+     * @return emailChannel as string
+     */
+    public static String updateSlacks(Request request, Response response) {
+        log.info("Updating slack metadata");
+        try {
+            SlackMetaData newSlackMetaData = new Gson().fromJson(request.body(), SlackMetaData.class);
+            SlackMetaData oldSlackMetadata = slackMetadataAccessor.getSlackMetadata(newSlackMetaData.getSlackId());
+            if (!newSlackMetaData.getRepeatInterval().equalsIgnoreCase(oldSlackMetadata.getRepeatInterval())) {
+                slackMetadataAccessor.removeFromTriggerIndex(newSlackMetaData.getSlackId(), oldSlackMetadata.getRepeatInterval());
+            }
+            slackMetadataAccessor.putSlackMetadata(newSlackMetaData);
+            response.status(200);
+            return Constants.SUCCESS;
+        } catch (Exception e) {
+            log.error("Exception while stopping the job!", e);
+            response.status(500);
+            return e.getMessage();
+        }
+    }
+
+    /**
      * Method to delete email metadata as requested.
+     *
      * @param request  HTTP request
      * @param response HTTP response
      * @return status string
@@ -1154,13 +1288,35 @@ public class Routes {
     public static String deleteEmail(Request request, Response response) {
         log.info("Deleting email metadata");
         try {
-            EmailMetaData emailMetaData = new Gson().fromJson(request.body(), EmailMetaData.class);
-            if (!EmailService.validateEmail(emailMetaData.getEmailId(), EmailService.getValidDomainsFromSettings())) {
+            EmailMetaData emailMetaDataFromRequest = new Gson().fromJson(request.body(), EmailMetaData.class);
+            if (!EmailService.validateEmail(emailMetaDataFromRequest.getEmailId(), EmailService.getValidDomainsFromSettings())) {
                 response.status(500);
                 return "Invalid Email!";
             }
-            EmailMetaData emailMetadata = emailMetadataAccessor.getEmailMetadata(emailMetaData.getEmailId());
-            jobAccessor.deleteEmailFromJobs(emailMetadata);
+            EmailMetaData emailMetadataFromDB = emailMetadataAccessor.getEmailMetadata(emailMetaDataFromRequest.getEmailId());
+            jobAccessor.deleteEmailFromJobs(emailMetadataFromDB);
+            response.status(200);
+            return Constants.SUCCESS;
+        } catch (Exception e) {
+            log.error("Exception while stopping the job!", e);
+            response.status(500);
+            return e.getMessage();
+        }
+    }
+
+    /**
+     * Method to delete slack metadata as requested.
+     *
+     * @param request  HTTP request
+     * @param response HTTP response
+     * @return status string
+     */
+    public static String deleteSlack(Request request, Response response) {
+        log.info("Deleting slack metadata");
+        try {
+            SlackMetaData slackMetaDataFromRequest = new Gson().fromJson(request.body(), SlackMetaData.class);
+            SlackMetaData slackMetaDataFromDB = slackMetadataAccessor.getSlackMetadata(slackMetaDataFromRequest.getSlackId());
+            jobAccessor.deleteSlackFromJobs(slackMetaDataFromDB);
             response.status(200);
             return Constants.SUCCESS;
         } catch (Exception e) {
@@ -1246,7 +1402,8 @@ public class Routes {
         try {
             Map<String, String> params = new Gson().fromJson(
                     request.body(),
-                    new TypeToken<Map<String, String>>() { }.getType()
+                    new TypeToken<Map<String, String>>() {
+                    }.getType()
             );
             String[] jobIds = params.get("jobId").split(Constants.COMMA_DELIMITER);
             ZonedDateTime startTime = TimeUtils.parseDateTime(params.get("fillStartTime"));
@@ -1398,7 +1555,8 @@ public class Routes {
             List<AnomalyReport> reports = executionService.getReports(anomalies, job);
             response.status(200);
             Gson gson = new Gson();
-            Type jsonType = new TypeToken<EgadsResult.Series[]>() { }.getType();
+            Type jsonType = new TypeToken<EgadsResult.Series[]>() {
+                }.getType();
             String data = gson.toJson(EgadsResult.fuseResults(egadsResult), jsonType);
             tableParams.put(DatabaseConstants.ANOMALIES, reports);
             String tableHtml = thymeleaf.render(new ModelAndView(tableParams, "table"));
@@ -1413,7 +1571,8 @@ public class Routes {
 
     /**
      * Method to view redis restore form.
-     * @param request HTTP request
+     *
+     * @param request  HTTP request
      * @param response HTTP response
      * @return redisRestoreForm html
      * @throws IOException exception
@@ -1425,12 +1584,14 @@ public class Routes {
 
     /**
      * Method to process the restore of redis DB from given json file.
-     * @param request HTTP request
+     *
+     * @param request  HTTP request
      * @param response HTTP response
      * @return request status 'success' or error
      */
     public static String restoreRedisDB(Request request, Response response) {
-        Map<String, String> params = new Gson().fromJson(request.body(), new TypeToken<Map<String, String>>() { }.getType());
+        Map<String, String> params = new Gson().fromJson(request.body(), new TypeToken<Map<String, String>>() {
+            }.getType());
         String filePath = params.get(Constants.PATH);
         try {
             schedulerService.removeAllJobsFromQueue();

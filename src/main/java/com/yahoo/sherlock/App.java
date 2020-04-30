@@ -70,15 +70,9 @@ class App {
         jCommander.parse(args);
         // Attempt to read settings from a file
         settings.loadFromConfig();
-        // check for email service cli args
-        if (CLISettings.ENABLE_EMAIL) {
-            if (CLISettings.FROM_MAIL == null ||
-                CLISettings.REPLY_TO == null ||
-                CLISettings.FAILURE_EMAIL == null ||
-                CLISettings.SMTP_HOST == null) {
-                throw new ParameterException("Please specify all [--from-mail, --reply-to, --failure-email, --smtp-host] if you want to enable email service!");
-            }
-        }
+        // check for email and slack service cli args
+        checkCliArgs();
+
         // Print the settings
         settings.print();
         // Check if we want to print help
@@ -89,6 +83,27 @@ class App {
         }
         log.info("Starting the app...");
         app.run();
+    }
+
+    /**
+     * Check the CLI Arguments for Email and Slack if they are correct set.
+     */
+    private static void checkCliArgs() {
+        if (CLISettings.ENABLE_EMAIL) {
+            if (CLISettings.FROM_MAIL == null ||
+                    CLISettings.REPLY_TO == null ||
+                    CLISettings.FAILURE_EMAIL == null ||
+                    CLISettings.SMTP_HOST == null) {
+                throw new ParameterException("Please specify all [--from-mail, --reply-to, --failure-email, --smtp-host] if you want to enable email service!");
+            }
+        }
+
+        if (CLISettings.ENABLE_SLACK) {
+            if (CLISettings.FAILURE_SLACK_WEBHOOK_URL == null ||
+                    CLISettings.FAILURE_SLACK_USERNAME == null) {
+                throw new ParameterException("Please specify all [--failure-slack-webhook-url, --failure-slack-username] if you want to enable slack service!");
+            }
+        }
     }
 
     /**
@@ -195,7 +210,7 @@ class App {
         // Routes to show the new Druid Cluster form
         get("/Druid/NewCluster", Routes::viewNewDruidClusterForm, thymeleafTemplateEngine);
 
-        // Routes to add a new Druid cluster
+        // Routes to add a new Slack
         post("/Druid/NewCluster", Routes::addNewDruidCluster);
 
         // Routes to view the list of Druid clusters
@@ -209,6 +224,12 @@ class App {
 
         // Routes to update a Druid cluster
         post("/Druid/UpdateCluster/:id", Routes::updateDruidCluster);
+
+        // Routes to show the new Druid Cluster form
+        get("/Slack/NewSlack", Routes::viewNewSlackForm, thymeleafTemplateEngine);
+
+        // Routes to add a new Slack cluster
+        post("/Slack/NewSlack", Routes::addNewSlack);
 
         // Routes to Rerun the job for given timestamp in minutes
         post("/Rerun", Routes::rerunJob);
@@ -236,6 +257,15 @@ class App {
 
         // Routes to delete Email
         post("/DeleteEmail", Routes::deleteEmail);
+
+        // Routes to view Slacks
+        get("/Slacks/:id", Routes::viewSlacks, thymeleafTemplateEngine);
+
+        // Routes to update Slacks
+        post("/UpdateSlack", Routes::updateSlacks);
+
+        // Routes to delete Slack
+        post("/DeleteSlack", Routes::deleteSlack);
 
         // Enable debug routes only in debug mode
         if (CLISettings.DEBUG_MODE) {

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+
+<head th:replace="fragments/head :: head"></head>
+
+<body>
+<!-- Wrapper -->
+<div id="wrapper">
+    <!-- Sidebar -->
+    <div id="sidebar-wrapper" th:replace="fragments/nav :: nav"></div>
+    <!-- #Sidebar -->
+
+    <!-- Page Content -->
+    <div id="page-content-wrapper">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-lg-12">
+                    <h1 th:text="${title}">TITLE</h1>
+                    <div th:if="${error != null}" th:text="${error}" class="alert alert-danger" role="alert">Error message</div>
+                    <form id="slackForm" method='post'>
+                        <fieldset>
+
+                            <div class="form-group">
+                                <label class="control-label" for="owner-slack-id">ID:</label>
+                                <div>
+                                    <input id="owner-slack-id" name="owner-slack-id" type="text"
+                                           class="form-control input-md" size="25" required="true"
+                                           disabled="true" th:value="${slack.getSlackId()}" />
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="control-label" for="owner-slack-webhook">Webhook Url:</label>
+                                <div>
+                                    <input id="owner-slack-webhook" name="owner-slack-webhook" type="text"
+                                           class="form-control input-md" size="25" required="true"
+                                           disabled="true" th:value="${slack.getSlackWebhookUrl()}" />
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="control-label" for="owner-slack-username">Username:</label>
+                                <div>
+                                    <input id="owner-slack-username" name="owner-slack-username" type="text"
+                                           class="form-control input-md" size="25" required="true"
+                                           disabled="true" th:value="${slack.getSlackUsername()}" />
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="control-label" for="owner-slack-icon-emoji">Icon Emoji:</label>
+                                <div>
+                                    <input id="owner-slack-icon-emoji" name="owner-slack-icon-emoji" type="text"
+                                           class="form-control input-md" size="25"
+                                           disabled="true" th:value="${slack.getSlackIconEmoji()}" />
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="control-label" for="owner-slack-mention">Mention:</label>
+                                <div>
+                                    <input id="owner-slack-mention" name="owner-slack-mention" type="text"
+                                           class="form-control input-md" size="25"
+                                           disabled="true" th:value="${slack.getSlackMention()}" />
+                                </div>
+                            </div>
+                            <div class="form-group" id="hourDiv" name="hourDiv">
+                                <label class="control-label" for="sendOutHour">Send Out Hour(0-23):</label>
+                                <div>
+                                    <input id="sendOutHour" name="sendOutHour" type="number"
+                                           class="form-control input-md" size="25" th:value="${slack.getSendOutHour()}" max="23" th:required="true" onchange="updateMetadata()"/>
+                                </div>
+                            </div>
+                            <div class="form-group" id="minuteDiv" name="minuteDiv">
+                                <label class="control-label" for="sendOutMinute">Send Out Minute(0-59):</label>
+                                <div>
+                                    <input id="sendOutMinute" name="sendOutMinute" type="number"
+                                           class="form-control input-md" size="25" th:value="${slack.getSendOutMinute()}" max="59" th:required="true" onchange="updateMetadata()"/>
+                                </div>
+                            </div>
+                            <div class="form-group" id="triggerSection">
+                                <label class="control-label" for="trigger">Trigger Interval:</label>
+                                <p id="defaultTriggerMsg" class="bg-info">Select the trigger interval to send out slack .
+                                    <code>Default: 'instant' i.e. as soon as report is available</code></p>
+                                <div>
+                                    <select id="trigger" name="trigger" class="form-control"
+                                            th:field="*{slackTriggers}" th:required="true" onchange="updateMetadata()">
+                                        <option th:each="trigger : ${slackTriggers}"
+                                                th:value="${trigger}"
+                                                th:selected="${trigger} == ${slack.getRepeatInterval()} ? true : false"
+                                                th:text="${trigger}"></option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="updateActions" class="form-group">
+                                <label class="control-label" for="submit">Action:</label>
+                                <div>
+                                    <!--Show update button for update-->
+                                    <span id="updateButton">
+                                        <input id="submit" type="submit" class="btn btn-success" value="Update" disabled="true"/>
+                                    </span>
+                                    <!--Show cancel button to cancel-->
+                                    <span id="cancelButton" hidden="true">
+                                        <div id="cancel" class="btn btn-danger" onclick="backToslackInfo()">Cancel</div>
+                                    </span>
+                                    <!--Show delete button to delete-->
+                                    <span id="deleteButton">
+                                        <div id="delete" class="btn btn-danger" onclick="deleteslack()">Delete</div>
+                                    </span>
+                                </div>
+                            </div>
+                        </fieldset>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script language="javascript" type="text/javascript" th:inline="javascript">
+/*<![CDATA[*/
+	$(document).ready(function() {
+		if ([[${slack.getRepeatInterval()}]] === 'instant') {
+            $('#sendOutHour').attr("disabled", true);
+            $('#hourDiv').attr("hidden", true);
+            $('#sendOutMinute').attr("disabled", true);
+            $('#minuteDiv').attr("hidden", true);
+		} else if([[${slack.getRepeatInterval()}]] === 'hour') {
+            $('#sendOutHour').attr("disabled", true);
+            $('#hourDiv').attr("hidden", true);
+            $('#sendOutMinute').attr("disabled", false);
+            $('#minuteDiv').attr("hidden", false);
+		}
+		$('#submit').attr("disabled", true);
+	});
+
+	$("#slackForm").submit(function(e) {
+        e.preventDefault();
+        var data = {};
+        data.slackId = $('#owner-slack-id').val();
+        data.slackWebhookUrl = $('#owner-slack-webhook').val();
+        data.slackUsername = $('#owner-slack-username').val();
+        data.slackIconEmoji = $('#owner-slack-icon-emoji').val();
+        data.slackMention = $('#owner-slack-mention').val();
+        data.sendOutHour = $('#sendOutHour').val();
+        data.sendOutMinute = $('#sendOutMinute').val();
+        data.repeatInterval = $('#trigger').val();
+        $.ajax({
+            type: 'POST',
+            url: '/UpdateSlack',
+            data: JSON.stringify(data),
+            contentType: "application/json",
+            dataType: 'text',
+            success: function (response, status, jQxhr) {
+                if (status === 'success') {
+                    showInfoMessage("slack info updated successfully.");
+                    setTimeout(function() {
+                        window.location.href = '/Slacks/' + $('#owner-slack-id').val();
+                    }, 1500);
+                } else {
+                    showErrorMessage("Something went wrong in updating slack info! Try again.");
+                }
+            },
+            error : ajaxMessage
+        });
+        return;
+    });
+
+    $('#sendOutHour').on('input', function() {
+        updateMetadata();
+    });
+
+    $('#sendOutMinute').on('input', function() {
+        updateMetadata();
+    });
+
+    function updateMetadata() {
+        if ($('#trigger').val() === 'instant') {
+            $('#sendOutHour').attr("disabled", true);
+            $('#sendOutMinute').attr("disabled", true);
+            $('#hourDiv').attr("hidden", true);
+            $('#minuteDiv').attr("hidden", true);
+		} else if($('#trigger').val() === 'hour') {
+            $('#sendOutMinute').attr("disabled", false);
+            $('#minuteDiv').attr("hidden", false);
+            $('#sendOutHour').attr("hidden", true);
+            $('#hourDiv').attr("hidden", true);
+		} else {
+		    $('#sendOutHour').attr("disabled", false);
+		    $('#hourDiv').attr("hidden", false);
+            $('#sendOutMinute').attr("disabled", false);
+            $('#minuteDiv').attr("hidden", false);
+        }
+		$('#submit').attr("disabled", false);
+        $('#cancelButton').attr("hidden", false);
+        $('#deleteButton').attr("hidden", true);
+    }
+
+    function backToslackInfo() {
+        window.location.href = '/slacks/' + $('#owner-slack-id').val();
+    }
+
+    function deleteslack() {
+        var data = {};
+        data.slackId = $('#owner-slack-id').val();
+        $.ajax({
+            type: 'POST',
+            url: '/DeleteSlack',
+            data: JSON.stringify(data),
+            contentType: "application/json",
+            dataType: 'text',
+            success: function (response, status, jQxhr) {
+                if (status === 'success') {
+                    showInfoMessage("slack info deleted successfully.");
+                    setTimeout(function() {
+                        window.location.href = '/Meta-Manager';
+                    }, 1500);
+                } else {
+                    showErrorMessage("Something went wrong while deleting slack! Try again.");
+                }
+            },
+            error : ajaxMessage
+        });
+        return;
+    }
+
+/*]]>*/
+</script>
+
+</body>
+
+</html>

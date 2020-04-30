@@ -8,7 +8,6 @@ package com.yahoo.sherlock.store;
 
 import com.yahoo.sherlock.settings.CLISettings;
 import com.yahoo.sherlock.settings.DatabaseConstants;
-
 import com.yahoo.sherlock.store.redis.LettuceAnomalyReportAccessor;
 import com.yahoo.sherlock.store.redis.LettuceDeletedJobMetadataAccessor;
 import com.yahoo.sherlock.store.redis.LettuceDruidClusterAccessor;
@@ -16,6 +15,7 @@ import com.yahoo.sherlock.store.redis.LettuceEmailMetadataAccessor;
 import com.yahoo.sherlock.store.redis.LettuceJobMetadataAccessor;
 import com.yahoo.sherlock.store.redis.LettuceJobScheduler;
 import com.yahoo.sherlock.store.redis.LettuceJsonDumper;
+import com.yahoo.sherlock.store.redis.LettuceSlackMetadataAccessor;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -39,6 +39,7 @@ public class Store {
         DRUID_CLUSTER,
         JOB_METADATA,
         EMAIL_METADATA,
+        SLACK_METADATA,
         JSON_DUMPER,
         JOB_SCHEDULER
     }
@@ -63,6 +64,10 @@ public class Store {
      * Active email metadata scheduler instance.
      */
     private static EmailMetadataAccessor emailMetadataAccessor = null;
+    /**
+     * Active slack metadata scheduler instance.
+     */
+    private static SlackMetadataAccessor slackMetadataAccessor = null;
     /**
      * Active json dumper instance.
      */
@@ -97,10 +102,14 @@ public class Store {
                 put(DatabaseConstants.INDEX_EMAILID_REPORT, DatabaseConstants.INDEX_EMAILID_REPORT);
                 put(DatabaseConstants.INDEX_EMAILID_TRIGGER, DatabaseConstants.INDEX_EMAILID_TRIGGER);
                 put(DatabaseConstants.INDEX_EMAILID_JOBID, DatabaseConstants.INDEX_EMAILID_JOBID);
+                put(DatabaseConstants.INDEX_SLACKID_REPORT, DatabaseConstants.INDEX_SLACKID_REPORT);
+                put(DatabaseConstants.INDEX_SLACKID_TRIGGER, DatabaseConstants.INDEX_SLACKID_TRIGGER);
+                put(DatabaseConstants.INDEX_SLACKID_JOBID, DatabaseConstants.INDEX_SLACKID_JOBID);
                 put(DatabaseConstants.INDEX_JOB_CLUSTER_ID, DatabaseConstants.INDEX_JOB_CLUSTER_ID);
                 put(DatabaseConstants.INDEX_JOB_STATUS, DatabaseConstants.INDEX_JOB_STATUS);
                 put(DatabaseConstants.QUEUE_JOB_SCHEDULE, DatabaseConstants.QUEUE_JOB_SCHEDULE);
                 put(DatabaseConstants.INDEX_EMAIL_ID, DatabaseConstants.INDEX_EMAIL_ID);
+                put(DatabaseConstants.INDEX_SLACK_ID, DatabaseConstants.INDEX_SLACK_ID);
             }
         };
         String dbName;
@@ -121,6 +130,10 @@ public class Store {
             case EMAIL_METADATA:
                 dbName = DatabaseConstants.EMAILS;
                 idName = DatabaseConstants.EMAIL_ID;
+                break;
+            case SLACK_METADATA:
+                dbName = DatabaseConstants.SLACKS;
+                idName = DatabaseConstants.SLACK_ID;
                 break;
             case JOB_METADATA:
             default:
@@ -158,6 +171,8 @@ public class Store {
                 return new LettuceJsonDumper(params);
             case EMAIL_METADATA:
                 return new LettuceEmailMetadataAccessor(params);
+            case SLACK_METADATA:
+                return new LettuceSlackMetadataAccessor(params);
             default:
                 return null;
         }
@@ -244,5 +259,16 @@ public class Store {
                     (EmailMetadataAccessor) initializeAccessor(AccessorType.EMAIL_METADATA);
         }
         return emailMetadataAccessor;
+    }
+
+    /**
+     * @return the slack metadata accessor instance
+     */
+    public static SlackMetadataAccessor getSlackMetadataAccessor() {
+        if (slackMetadataAccessor == null) {
+            slackMetadataAccessor =
+                    (SlackMetadataAccessor) initializeAccessor(AccessorType.SLACK_METADATA);
+        }
+        return slackMetadataAccessor;
     }
 }

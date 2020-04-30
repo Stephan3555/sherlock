@@ -52,6 +52,14 @@ public class ServiceFactory {
     }
 
     /**
+     * Method to get SlackService instance.
+     * @return EmailService object
+     */
+    public SlackService newSlackServiceInstance() {
+        return new SlackService();
+    }
+
+    /**
      * Method to get HttpService instance.
      * @return HttpService object
      */

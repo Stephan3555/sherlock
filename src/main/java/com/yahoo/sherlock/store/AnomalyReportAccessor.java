@@ -31,7 +31,20 @@ public interface AnomalyReportAccessor {
      * @param emailIds list of EmailIDs to index the report ID in order to send it later to user
      * @throws IOException if an error occurs
      */
-    void putAnomalyReports(List<AnomalyReport> reports, List<String> emailIds) throws IOException;
+    void putAnomalyReportsForEmails(List<AnomalyReport> reports, List<String> emailIds) throws IOException;
+
+    /**
+     * Put an anomaly report in the database keyed on the
+     * report ID. If the ID of the incoming report is null,
+     * a new ID should be generated and the new report is to be
+     * inserted. If the ID already exists, then the previous
+     * report should be overridden. Usually, the ID should
+     * have already been set based on the time series metric.
+     * @param reports the anomaly report to insert
+     * @param slackIds list of slackIds to index the report ID in order to send it later to user
+     * @throws IOException if an error occurs
+     */
+    void putAnomalyReportsForSlacks(List<AnomalyReport> reports, List<String> slackIds) throws IOException;
 
     /**
      * Get a list of anomaly reports that have the specified job ID.
@@ -55,6 +68,17 @@ public interface AnomalyReportAccessor {
      */
     @NonNull
     List<AnomalyReport> getAnomalyReportsForEmailId(String emailId) throws IOException;
+
+    /**
+     * Get a list of anomaly reports that are present in given slackId Index.
+     * This method should search the database for all anomaly reports
+     * present in the index of given slackId.
+     * @param slackId the slackId for which to find reports
+     * @return a list of associated reports, which may be empty
+     * @throws IOException if an error occurs
+     */
+    @NonNull
+    List<AnomalyReport> getAnomalyReportsForSlackId(String slackId) throws IOException;
 
     /**
      * Get a list of anomaly reports that have the specified job ID

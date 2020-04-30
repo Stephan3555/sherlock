@@ -88,6 +88,38 @@ public class DatabaseConstants {
      */
     public static final String INDEX_EMAILID_JOBID = "emailJobIndex";
     /**
+     * The name and value of the slack ID index parameter.
+     */
+    public static final String INDEX_SLACK_ID = "slackIdIndex";
+    /**
+     * The name and value of the slack ID index parameter.
+     */
+    public static final String INDEX_SLACKID_WEBHOOK = "slackIdWebhook";
+    /**
+     * The name and value of the slack ID index parameter.
+     */
+    public static final String INDEX_SLACKID_USERNAME = "slackIdUsername";
+    /**
+     * The name and value of the slack ID index parameter.
+     */
+    public static final String INDEX_SLACKID_ICON_EMOJI = "slackIdIconEmoji";
+    /**
+     * The name and value of the slack ID index parameter.
+     */
+    public static final String INDEX_SLACKID_MENTION = "slackIdMention";
+    /**
+     * The name and value of the slack-reports index parameter.
+     */
+    public static final String INDEX_SLACKID_REPORT = "slackIDReportsIndex";
+    /**
+     * The name and value of the slack trigger index parameter.
+     */
+    public static final String INDEX_SLACKID_TRIGGER = "slackTriggerIndex";
+    /**
+     * The name and value of the slack job index parameter.
+     */
+    public static final String INDEX_SLACKID_JOBID = "slackJobIndex";
+    /**
      * The name of the anomaly report field of anomaly timestamps.
      */
     public static final String ANOMALY_TIMESTAMP = "anomalyTimestamps";
@@ -130,6 +162,10 @@ public class DatabaseConstants {
      */
     public static final String EMAILS = "Emails";
     /**
+     * Database name for storing slack channels.
+     */
+    public static final String SLACKS = "Slacks";
+    /**
      * Database name for storing Headers(schema) for Serializers.
      */
     public static final String HEADERS = "Headers";
@@ -157,6 +193,10 @@ public class DatabaseConstants {
      * Atomic emailId generator name.
      */
     public static final String EMAIL_ID = "emailId";
+    /**
+     * Atomic slackId generator name.
+     */
+    public static final String SLACK_ID = "slackId";
     /**
      * Constant for index.
      */

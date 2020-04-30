@@ -22,6 +22,7 @@ import com.yahoo.sherlock.model.EgadsResult;
 import com.yahoo.sherlock.model.EmailMetaData;
 import com.yahoo.sherlock.model.JobMetadata;
 import com.yahoo.sherlock.model.JobTimeline;
+import com.yahoo.sherlock.model.SlackMetaData;
 import com.yahoo.sherlock.query.EgadsConfig;
 import com.yahoo.sherlock.query.Query;
 import com.yahoo.sherlock.service.JobExecutionService;
@@ -39,6 +40,7 @@ import com.yahoo.sherlock.store.DruidClusterAccessor;
 import com.yahoo.sherlock.store.EmailMetadataAccessor;
 import com.yahoo.sherlock.store.JobMetadataAccessor;
 import com.yahoo.sherlock.store.JsonDumper;
+import com.yahoo.sherlock.store.SlackMetadataAccessor;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -88,6 +90,7 @@ public class RoutesTest {
     private DruidQueryService qs;
     private DetectorService ds;
     private DruidClusterAccessor dca;
+    private SlackMetadataAccessor sma;
     private JobMetadataAccessor jma;
     private AnomalyReportAccessor ara;
     private EmailMetadataAccessor ema;
@@ -112,6 +115,8 @@ public class RoutesTest {
         inject("thymeleaf", tte);
         dca = mock(DruidClusterAccessor.class);
         inject("clusterAccessor", dca);
+        sma = mock(SlackMetadataAccessor.class);
+        inject("slackAccessor", sma);
         jma = mock(JobMetadataAccessor.class);
         inject("jobAccessor", jma);
         ara = mock(AnomalyReportAccessor.class);
@@ -230,9 +235,14 @@ public class RoutesTest {
         mocks();
         DruidCluster cl = new DruidCluster();
         cl.setClusterId(5);
+        SlackMetaData sl = new SlackMetaData();
+        sl.setSlackId("1");
         List<DruidCluster> cls = Collections.singletonList(cl);
+        List<SlackMetaData> sls = Collections.singletonList(sl);
         when(dca.getDruidClusterList()).thenReturn(cls);
+        when(sma.getAllSlackMetadata()).thenReturn(sls);
         inject("clusterAccessor", dca);
+        inject("slackAccessor", sma);
         ModelAndView mav = Routes.viewNewAnomalyJobForm(req, res);
         List<DruidCluster> clusters = (List<DruidCluster>) params(mav.getModel()).get(Constants.DRUID_CLUSTERS);
         assertEquals(clusters.size(), 1);
